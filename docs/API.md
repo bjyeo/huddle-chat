@@ -13,6 +13,7 @@ This is the single source of truth shared by `server/` and `client/`. Both sides
   accepted only if it is HS256-signed, has `exp` and `jti`, and its session row exists and hasn't expired.
   Logout deletes the session row, so a copy of the cookie stops working on REST and new socket handshakes
   too. Removing a user (`npm run remove-user`) revokes all their sessions; rotating `JWT_SECRET` invalidates every session at once.
+  Each user keeps at most 20 sessions (`MAX_SESSIONS_PER_USER`); a new login evicts the oldest beyond that.
   The client never touches the token directly; it sends requests with `credentials: 'include'`.
 - Every endpoint except `register`, `login`, `logout`, `GET /api/health` and `GET /api/meta` requires auth → `401 { error: "Not authenticated" }` otherwise.
 
