@@ -13,8 +13,9 @@
 
   --text: #dbdee1;
   --text-strong: #f2f3f5;
-  --text-muted: #949ba4;
-  --text-faint: #6d6f78;
+  /* Muted/faint/danger-text clear WCAG AA (4.5:1) on every surface they are used on. */
+  --text-muted: #a9afb7;
+  --text-faint: #9ea5ae;
   --link: #00a8fc;
 
   --brand: #5865f2;
@@ -22,6 +23,7 @@
   --brand-contrast: #fff;
   --danger: #f23f43;
   --danger-hover: #da373c;
+  --danger-text: #f78789; /* --danger is a fill colour; use this for red text and icons */
   --online: #23a55a;
   --idle: #f0b232;
   --offline: #80848e;
@@ -52,7 +54,8 @@
     --text: #313338;
     --text-strong: #060607;
     --text-muted: #5c5e66;
-    --text-faint: #80848e;
+    --text-faint: #62656e;
+    --danger-text: #c4262b;
     --link: #006ce7;
     --shadow: 0 8px 24px rgb(0 0 0 / 15%);
   }
@@ -171,13 +174,14 @@ ol {
   background: var(--brand-hover);
 }
 
+/* White on --danger is only 3.77:1; these fills keep the label at AA (4.57:1 and 6.19:1). */
 .btn--danger {
-  background: var(--danger);
+  background: var(--danger-hover);
   color: #fff;
 }
 
 .btn--danger:hover:not(:disabled) {
-  background: var(--danger-hover);
+  background: #b8292e;
 }
 
 .btn--ghost {
@@ -228,7 +232,7 @@ ol {
 }
 
 .icon-btn--danger:hover:not(:disabled) {
-  color: var(--danger);
+  color: var(--danger-text);
 }
 
 .icon-btn:disabled {
@@ -286,7 +290,7 @@ ol {
 }
 
 .form-error {
-  color: var(--danger);
+  color: var(--danger-text);
   font-size: 14px;
 }
 
@@ -461,6 +465,12 @@ ol {
   font-size: 20px;
   font-weight: 400;
   line-height: 1;
+}
+
+/* Hover/active rows have a stronger background; the hash follows the row's text colour there. */
+.channel:hover .channel__hash,
+.channel.is-active .channel__hash {
+  color: inherit;
 }
 
 .channel__name {
@@ -979,7 +989,7 @@ ol {
 }
 
 .composer__counter--over {
-  color: var(--danger);
+  color: var(--danger-text);
   font-weight: 700;
 }
 
@@ -1027,7 +1037,12 @@ ol {
   background: var(--bg-hover);
 }
 
+/* Dim offline members without fading the name below AA: only the avatar is translucent. */
 .member--offline {
+  color: var(--text-muted);
+}
+
+.member--offline .avatar {
   opacity: 0.45;
 }
 

@@ -27,7 +27,8 @@ export function usePanels() {
   useEffect(() => {
     if (!overlayOpen) return;
     const onKeyDown = (event) => {
-      if (event.key !== 'Escape') return;
+      // A modal on top owns Escape (useModalFocus stops it in the capture phase); belt and braces.
+      if (event.key !== 'Escape' || event.defaultPrevented) return;
       setSidebarOpen(false);
       if (!wide) setMembersOpen(false);
     };
