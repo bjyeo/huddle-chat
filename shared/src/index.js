@@ -25,10 +25,13 @@ export const TYPING_THROTTLE_MS = 1000;
 
 const isString = (v) => typeof v === 'string';
 const isAbsent = (v) => v === undefined || v === null;
-// trim() leaves zero-width spaces, joiners, bidi marks, Hangul fillers etc., so a string of only
-// those would pass as non-empty yet render blank.
 const BLANK_RE = /^[\s\p{Default_Ignorable_Code_Point}]*$/u;
-const isBlank = (s) => BLANK_RE.test(s);
+
+/**
+ * True for strings that would render as nothing: trim() leaves zero-width spaces, joiners, bidi
+ * marks, Hangul fillers etc., so a string of only those passes a length check yet looks empty.
+ */
+export const isBlank = (s) => BLANK_RE.test(s);
 
 /** Trim, lowercase, whitespace runs → `-`. Doesn't validate; see validateChannelName. */
 export function normalizeChannelName(name) {

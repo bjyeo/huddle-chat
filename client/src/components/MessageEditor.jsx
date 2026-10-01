@@ -1,6 +1,6 @@
 import { useId, useState } from 'react';
 import { useAsyncAction } from '../hooks/useAsyncAction.js';
-import { MESSAGE_MAX } from '../lib/validation.js';
+import { MESSAGE_MAX, isBlank } from '../lib/validation.js';
 
 /** Inline edit box: Enter saves, Shift+Enter adds a newline, Escape cancels. */
 export function MessageEditor({ initial, onSave, onCancel }) {
@@ -11,7 +11,7 @@ export function MessageEditor({ initial, onSave, onCancel }) {
   const save = () => {
     const content = draft.trim();
     if (content === initial) return onCancel();
-    if (content && content.length <= MESSAGE_MAX) run(content);
+    if (!isBlank(content) && content.length <= MESSAGE_MAX) run(content);
   };
 
   const onKeyDown = (event) => {
