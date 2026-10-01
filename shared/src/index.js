@@ -25,6 +25,10 @@ export const TYPING_THROTTLE_MS = 1000;
 
 const isString = (v) => typeof v === 'string';
 const isAbsent = (v) => v === undefined || v === null;
+// trim() leaves zero-width spaces, joiners, bidi marks, Hangul fillers etc., so a string of only
+// those would pass as non-empty yet render blank.
+const BLANK_RE = /^[\s\p{Default_Ignorable_Code_Point}]*$/u;
+const isBlank = (s) => BLANK_RE.test(s);
 
 /** Trim, lowercase, whitespace runs → `-`. Doesn't validate; see validateChannelName. */
 export function normalizeChannelName(name) {
@@ -61,7 +65,7 @@ export function validateDisplayName(displayName, username) {
   if (isAbsent(displayName)) return { value: username };
   if (!isString(displayName)) return { error: 'Display name must be a string' };
   const trimmed = displayName.trim();
-  if (trimmed.length === 0) return { value: username };
+  if (isBlank(trimmed)) return { value: username };
   if (trimmed.length > DISPLAY_NAME_MAX) {
     return { error: `Display name must be at most ${DISPLAY_NAME_MAX} characters` };
   }
@@ -84,6 +88,7 @@ export function validateTopic(topic) {
   if (isAbsent(topic)) return { value: '' };
   if (!isString(topic)) return { error: 'Topic must be a string' };
   const trimmed = topic.trim();
+  if (isBlank(trimmed)) return { value: '' };
   if (trimmed.length > TOPIC_MAX) return { error: `Topic must be at most ${TOPIC_MAX} characters` };
   return { value: trimmed };
 }
@@ -91,7 +96,7 @@ export function validateTopic(topic) {
 export function validateContent(content) {
   if (!isString(content)) return { error: 'Message content is required' };
   const trimmed = content.trim();
-  if (trimmed.length === 0) return { error: 'Message cannot be empty' };
+  if (isBlank(trimmed)) return { error: 'Message cannot be empty' };
   if (trimmed.length > MESSAGE_MAX) {
     return { error: `Message must be at most ${MESSAGE_MAX} characters` };
   }

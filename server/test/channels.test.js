@@ -45,6 +45,12 @@ describe('channels', () => {
     assert.equal(res.body.channel.topic, '');
   });
 
+  it('stores an invisible-only topic as empty', async () => {
+    const res = await alice.agent.post('/api/channels').send({ name: 'quiet', topic: '\u200b' });
+    assert.equal(res.status, 201);
+    assert.equal(res.body.channel.topic, '');
+  });
+
   it('rejects duplicate names after normalization with 409', async () => {
     for (const name of ['game-night', 'GAME NIGHT', 'General']) {
       const res = await bob.agent.post('/api/channels').send({ name });

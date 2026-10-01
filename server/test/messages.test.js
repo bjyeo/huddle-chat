@@ -33,6 +33,7 @@ describe('messages', () => {
   for (const [label, content] of [
     ['missing', undefined],
     ['blank', '   '],
+    ['invisible-only', '\u200b\u200d \u2060'],
     ['too long', 'x'.repeat(2001)],
     ['non-string', 123],
   ]) {
@@ -122,8 +123,10 @@ describe('messages', () => {
     });
 
     it('validates edited content', async () => {
-      const res = await alice.agent.patch(`/api/messages/${message.id}`).send({ content: ' ' });
-      assert.equal(res.status, 400);
+      for (const content of [' ', '\u200b']) {
+        const res = await alice.agent.patch(`/api/messages/${message.id}`).send({ content });
+        assert.equal(res.status, 400);
+      }
     });
 
     it('forbids editing or deleting someone else’s message', async () => {
