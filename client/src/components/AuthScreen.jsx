@@ -1,6 +1,7 @@
 import { useId, useState } from 'react';
 import { useAsyncAction } from '../hooks/useAsyncAction.js';
 import { useAuth } from '../hooks/useAuth.jsx';
+import { useServerMeta } from '../hooks/useServerMeta.js';
 import { DISPLAY_NAME_MAX, validateRegistration } from '../lib/validation.js';
 import { LogoIcon } from './icons.jsx';
 
@@ -30,6 +31,7 @@ function Field({ label, hint, optional, ...inputProps }) {
 
 export function AuthScreen() {
   const { login, register } = useAuth();
+  const { maxUsers, inviteRequired } = useServerMeta();
   const [mode, setMode] = useState('login');
   const [fields, setFields] = useState(EMPTY);
   const isRegister = mode === 'register';
@@ -56,6 +58,7 @@ export function AuthScreen() {
 
     const problem = validateRegistration({ ...fields, username });
     if (problem) return setError(problem);
+    if (inviteRequired && !fields.inviteCode.trim()) return setError('Enter your invite code.');
     run({
       username,
       password: fields.password,
@@ -73,7 +76,7 @@ export function AuthScreen() {
         <h1 className="auth__title">{isRegister ? 'Create an account' : 'Welcome back!'}</h1>
         <p className="auth__subtitle">
           {isRegister
-            ? 'Join your Huddle — up to 10 members.'
+            ? `Join your Huddle${maxUsers ? ` — up to ${maxUsers} members` : ''}.`
             : 'We’re so excited to see you again!'}
         </p>
 
@@ -103,12 +106,18 @@ export function AuthScreen() {
           hint={isRegister && 'At least 8 characters.'}
           {...bind('password')}
         />
-        {isRegister && (
+        {/* Hidden only once the server confirms it doesn't need one. */}
+        {isRegister && inviteRequired !== false && (
           <Field
             label="Invite code"
-            optional
+            optional={!inviteRequired}
+            required={inviteRequired === true}
             autoComplete="off"
-            hint="Only needed if this server requires one."
+            hint={
+              inviteRequired
+                ? 'Ask the person who runs this server.'
+                : 'Only needed if this server requires one.'
+            }
             {...bind('inviteCode')}
           />
         )}

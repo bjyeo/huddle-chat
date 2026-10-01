@@ -1,0 +1,13 @@
+{
+  "name": "@huddle/shared",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Contract rules shared by the Huddle server and client (see docs/API.md)",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.js"
+  },
+  "scripts": {
+    "test": "node --test test/*.test.js"
+  }
+}

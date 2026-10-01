@@ -1,19 +1,17 @@
 import { Router } from 'express';
+import { loadById, requireOwner } from '../middleware.js';
 import { parseId, validateContent } from '../validation.js';
 
 const DEFAULT_LIMIT = 50;
 const MAX_LIMIT = 100;
 
-/** Mounted at /api/channels/:id/messages. */
+/** Mounted at /api/channels/:id/messages; every route needs the channel to exist. */
 export function channelMessagesRouter({ store, broadcast }) {
   const router = Router({ mergeParams: true });
 
-  router.use((req, res, next) => {
-    const id = parseId(req.params.id);
-    req.channel = id && store.findChannel(id);
-    if (!req.channel) return res.status(404).json({ error: 'Channel not found' });
-    next();
-  });
+  router.use(
+    loadById({ find: (id) => store.findChannel(id), as: 'channel', notFound: 'Channel not found' }),
+  );
 
   router.get('/', (req, res) => {
     const { before, limit } = req.query;
@@ -45,22 +43,21 @@ export function channelMessagesRouter({ store, broadcast }) {
   return router;
 }
 
-/** Mounted at /api/messages. Edits and deletes are author-only. */
+/** Mounted at /api/messages. Access rules are declared per route. */
 export function messagesRouter({ store, broadcast }) {
   const router = Router();
 
-  router.param('id', (req, res, next, rawId) => {
-    const id = parseId(rawId);
-    const message = id && store.findMessage(id);
-    if (!message) return res.status(404).json({ error: 'Message not found' });
-    if (message.author.id !== req.user.id) {
-      return res.status(403).json({ error: 'You can only change your own messages' });
-    }
-    req.message = message;
-    next();
+  const loadMessage = loadById({
+    find: (id) => store.findMessage(id),
+    as: 'message',
+    notFound: 'Message not found',
   });
+  const requireAuthor = requireOwner(
+    (req) => req.message.author.id,
+    'You can only change your own messages',
+  );
 
-  router.patch('/:id', (req, res) => {
+  router.patch('/:id', loadMessage, requireAuthor, (req, res) => {
     const content = validateContent(req.body?.content);
     if (content.error) return res.status(400).json({ error: content.error });
 
@@ -69,7 +66,7 @@ export function messagesRouter({ store, broadcast }) {
     res.json({ message });
   });
 
-  router.delete('/:id', (req, res) => {
+  router.delete('/:id', loadMessage, requireAuthor, (req, res) => {
     const { id, channelId } = req.message;
     store.deleteMessage(id);
     broadcast('message:deleted', { id, channelId });

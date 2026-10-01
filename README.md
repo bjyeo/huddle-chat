@@ -24,7 +24,7 @@ A small, self-hosted, Discord-style group chat for up to **10 people**: text cha
 Requires **Node.js 22.13+** (for `node:sqlite`).
 
 ```bash
-npm install          # installs both workspaces and enables the git pre-commit hook
+npm install          # installs all workspaces and enables the git pre-commit hook
 npm run dev          # API on http://localhost:3001, app on http://localhost:5173
 ```
 
@@ -58,7 +58,9 @@ In production the server refuses to start unless:
 Sessions are stored server-side: logging out revokes that session everywhere, including copies of the
 cookie. With open registration (`ALLOW_OPEN_REGISTRATION=true`) sign-ups are limited to 5 attempts per
 IP per hour; with an invite code there is no such cap, so a whole group can join from one office IP.
-Failed logins and wrong invite codes are limited to 10 per IP per 15 minutes.
+Failed logins and wrong invite codes are limited to 10 per IP per 15 minutes. All limits key on the client
+IP, so behind a reverse proxy set `TRUST_PROXY` (usually `1`) — otherwise every visitor shares the proxy's IP
+and one person can exhaust a limit for everyone. Each user keeps at most 20 sessions; older ones are evicted.
 Upgrading from a version without server-side sessions logs everyone out once.
 
 ### Administration
@@ -84,6 +86,7 @@ See [`.env.example`](.env.example) and the table in [`docs/API.md`](docs/API.md#
 ```
 client/            React app (hooks in client/src/hooks)
 server/            Express + Socket.IO + SQLite API
+shared/            @huddle/shared: validation rules and limits imported by both sides
 docs/API.md        REST + realtime contract shared by both sides
 .claude/           Claude Code project settings and hooks
 .githooks/         git pre-commit hook (Prettier check)
@@ -93,7 +96,7 @@ docs/API.md        REST + realtime contract shared by both sides
 ## Tests
 
 ```bash
-npm test             # server (node:test) then client (Vitest)
+npm test             # shared + server (node:test), then client (Vitest)
 npm run format:check
 ```
 

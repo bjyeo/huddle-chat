@@ -1,4 +1,4 @@
-import { MAX_MEMBERS } from '../lib/validation.js';
+import { useServerMeta } from '../hooks/useServerMeta.js';
 import { Avatar } from './Avatar.jsx';
 
 function MemberGroup({ title, members, currentUserId }) {
@@ -24,12 +24,15 @@ function MemberGroup({ title, members, currentUserId }) {
 }
 
 export function MemberList({ online, offline, currentUserId }) {
+  const { maxUsers } = useServerMeta();
+  const count = online.length + offline.length;
+
   return (
     <aside className="members" aria-label="Members">
       <MemberGroup title="Online" members={online} currentUserId={currentUserId} />
       <MemberGroup title="Offline" members={offline} currentUserId={currentUserId} />
       <p className="members__note">
-        {online.length + offline.length} / {MAX_MEMBERS} members
+        {maxUsers ? `${count} / ${maxUsers} members` : `${count} members`}
       </p>
     </aside>
   );

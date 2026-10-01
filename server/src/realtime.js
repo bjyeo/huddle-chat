@@ -1,9 +1,9 @@
+import { TYPING_THROTTLE_MS } from '@huddle/shared';
 import { parseCookie } from 'cookie';
 import { Server } from 'socket.io';
 import { COOKIE_NAME, verifySession } from './auth.js';
 
 const MEMBERS_ROOM = 'members';
-const TYPING_THROTTLE_MS = 1000;
 const MAX_TIMEOUT_MS = 2 ** 31 - 1; // setTimeout's ceiling (~24.8 days)
 const SESSION_SWEEP_MS = 60 * 1000;
 
@@ -70,7 +70,8 @@ export function createRealtime(httpServer, { store, config }) {
     connections.set(user.id, count);
     if (count === 1) io.to(MEMBERS_ROOM).emit('presence:update', { userId: user.id, online: true });
 
-    const lastTyping = new Map(); // channelId -> timestamp
+    // Relay at most one typing event per channel per TYPING_THROTTLE_MS; drop the rest silently.
+    const lastTyping = new Map(); // channelId -> timestamp of the last relayed event
     socket.on('typing', (payload) => {
       const channelId = payload?.channelId;
       if (!Number.isSafeInteger(channelId) || !store.findChannel(channelId)) return;

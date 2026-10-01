@@ -1,3 +1,4 @@
+import { isProtectedChannel } from '@huddle/shared';
 import { useState } from 'react';
 import { ConfirmDialog } from './ConfirmDialog.jsx';
 import { CreateChannelForm } from './CreateChannelForm.jsx';
@@ -86,7 +87,7 @@ export function ChannelList({
             channel={channel}
             active={channel.id === activeId}
             unread={unread.has(channel.id)}
-            canDelete={channel.createdBy === currentUserId && channel.name !== 'general'}
+            canDelete={!isProtectedChannel(channel) && channel.createdBy === currentUserId}
             onSelect={onSelect}
             onDelete={onDelete}
           />

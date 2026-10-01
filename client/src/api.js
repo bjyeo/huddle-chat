@@ -37,6 +37,7 @@ async function request(path, { method = 'GET', body } = {}) {
 }
 
 export const getHealth = () => request('/health');
+export const getMeta = () => request('/meta');
 
 export const register = ({ username, password, displayName, inviteCode }) =>
   request('/auth/register', {

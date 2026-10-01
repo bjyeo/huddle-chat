@@ -5,6 +5,7 @@ import path from 'node:path';
 import { after, afterEach, before, describe, it } from 'node:test';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
+import { MAX_SESSIONS_PER_USER } from '../src/auth.js';
 import { loadConfig } from '../src/config.js';
 import { openDatabase } from '../src/db.js';
 import {
@@ -250,6 +251,32 @@ describe('registration rate limiting', () => {
           .send({ username: `member_${i}`, password: PASSWORD, inviteCode: 'let-me-in' });
         assert.equal(res.status, 201, `member_${i}: ${res.text}`);
       }
+    } finally {
+      await server.stop();
+    }
+  });
+});
+
+describe('session cap', () => {
+  it(`keeps only the newest ${MAX_SESSIONS_PER_USER} sessions per user`, async () => {
+    const server = await startServer();
+    try {
+      await registerUser(server, 'frank');
+      const cookies = [];
+      for (let i = 0; i < MAX_SESSIONS_PER_USER + 2; i++) {
+        const res = await server
+          .request()
+          .post('/api/auth/login')
+          .send({ username: 'frank', password: PASSWORD });
+        assert.equal(res.status, 200);
+        cookies.push(sessionCookie(res));
+      }
+      const { count } = server.db.prepare('SELECT COUNT(*) AS count FROM sessions').get();
+      assert.equal(count, MAX_SESSIONS_PER_USER);
+
+      const me = (cookie) => server.request().get('/api/auth/me').set('Cookie', cookie);
+      assert.equal((await me(cookies[0])).status, 401); // evicted
+      assert.equal((await me(cookies.at(-1))).status, 200);
     } finally {
       await server.stop();
     }

@@ -1,11 +1,28 @@
+import { MAX_CHANNELS, isProtectedChannel } from '@huddle/shared';
 import { Router } from 'express';
+import { loadById, requireOwner } from '../middleware.js';
 import { isUniqueViolation } from '../store.js';
-import { normalizeChannelName, parseId, validateTopic } from '../validation.js';
-
-export const MAX_CHANNELS = 50;
+import { validateChannelName, validateTopic } from '../validation.js';
 
 export function channelsRouter({ store, broadcast }) {
   const router = Router();
+
+  const loadChannel = loadById({
+    find: (id) => store.findChannel(id),
+    as: 'channel',
+    notFound: 'Channel not found',
+  });
+  // Seeded channels (#general) have no creator and can never be deleted.
+  const rejectProtected = (req, res, next) => {
+    if (isProtectedChannel(req.channel)) {
+      return res.status(403).json({ error: `#${req.channel.name} can't be deleted` });
+    }
+    next();
+  };
+  const requireCreator = requireOwner(
+    (req) => req.channel.createdBy,
+    'Only the channel creator can delete it',
+  );
 
   router.get('/', (req, res) => {
     res.json({ channels: store.listChannels() });
@@ -13,7 +30,7 @@ export function channelsRouter({ store, broadcast }) {
 
   router.post('/', (req, res) => {
     const { name, topic } = req.body ?? {};
-    const normalized = normalizeChannelName(name);
+    const normalized = validateChannelName(name);
     if (normalized.error) return res.status(400).json({ error: normalized.error });
     const cleanTopic = validateTopic(topic);
     if (cleanTopic.error) return res.status(400).json({ error: cleanTopic.error });
@@ -40,19 +57,8 @@ export function channelsRouter({ store, broadcast }) {
     res.status(201).json({ channel });
   });
 
-  router.delete('/:id', (req, res) => {
-    const id = parseId(req.params.id);
-    const channel = id && store.findChannel(id);
-    if (!channel) return res.status(404).json({ error: 'Channel not found' });
-
-    // Seeded channels (#general) have no creator and can never be deleted.
-    if (channel.createdBy === null) {
-      return res.status(403).json({ error: `#${channel.name} can't be deleted` });
-    }
-    if (channel.createdBy !== req.user.id) {
-      return res.status(403).json({ error: 'Only the channel creator can delete it' });
-    }
-
+  router.delete('/:id', loadChannel, rejectProtected, requireCreator, (req, res) => {
+    const { id } = req.channel;
     store.deleteChannel(id); // messages go with it via ON DELETE CASCADE
     broadcast('channel:deleted', { id });
     res.status(204).end();
