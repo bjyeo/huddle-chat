@@ -1,6 +1,7 @@
 import { useMessages } from '../hooks/useMessages.js';
 import { useTyping } from '../hooks/useTyping.js';
 import { Composer } from './Composer.jsx';
+import { MessageAnnouncer } from './MessageAnnouncer.jsx';
 import { MessageList } from './MessageList.jsx';
 import { TypingIndicator } from './TypingIndicator.jsx';
 
@@ -25,6 +26,11 @@ export function ChatView({ channel, currentUserId }) {
         loadOlder={loadOlder}
         onEdit={edit}
         onDelete={remove}
+      />
+      <MessageAnnouncer
+        key={`announcer-${channel.id}`}
+        channelId={channel.id}
+        currentUserId={currentUserId}
       />
       <TypingIndicator typers={typers} />
       <Composer
