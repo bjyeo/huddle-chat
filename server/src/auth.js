@@ -3,7 +3,7 @@ import bcrypt from 'bcryptjs';
 import jwt from 'jsonwebtoken';
 
 export const COOKIE_NAME = 'token';
-const SESSION_MS = 7 * 24 * 60 * 60 * 1000;
+const SESSION_SECONDS = 7 * 24 * 60 * 60;
 const BCRYPT_COST = 10;
 
 // Compared against when the username doesn't exist, so unknown users cost the same time.
@@ -13,37 +13,57 @@ export const hashPassword = (password) => bcrypt.hash(password, BCRYPT_COST);
 
 export const verifyPassword = (password, hash) => bcrypt.compare(password, hash ?? DUMMY_HASH);
 
-// jwtid makes every login a distinct session, even two within the same second.
-export const signToken = (userId, secret) =>
-  jwt.sign({ sub: userId }, secret, {
-    algorithm: 'HS256',
-    expiresIn: '7d',
-    jwtid: crypto.randomUUID(),
-  });
+/**
+ * Starts a server-side session for the user and returns its signed token. The token's `jti` is
+ * the session row's key, so deleting the row (logout, user removal) revokes the token.
+ */
+export function issueToken(userId, { store, secret, ttlSeconds = SESSION_SECONDS }) {
+  store.deleteExpiredSessions();
+  const iat = Math.floor(Date.now() / 1000);
+  const exp = iat + ttlSeconds;
+  // A random jti makes every login a distinct session, even two within the same second.
+  const jti = crypto.randomUUID();
+  store.createSession({ jti, userId, expiresAt: new Date(exp * 1000).toISOString() });
+  return jwt.sign({ sub: userId, iat, exp, jti }, secret, { algorithm: 'HS256' });
+}
 
-/** Returns the user a token belongs to, or null for invalid/expired tokens and deleted users. */
-export function authenticateToken(token, { store, secret }) {
+/**
+ * Verifies a token against its session row. Returns `{ user, jti, expiresAt }` (ms), or null for
+ * invalid, expired or revoked tokens and deleted users.
+ */
+export function verifySession(token, { store, secret }) {
   if (typeof token !== 'string' || token === '') return null;
+  let payload;
   try {
-    const { sub } = jwt.verify(token, secret, { algorithms: ['HS256'] });
-    return Number.isSafeInteger(sub) ? (store.findUserById(sub) ?? null) : null;
+    payload = jwt.verify(token, secret, { algorithms: ['HS256'] });
   } catch {
     return null;
   }
+  // jwt.verify only checks exp when present; every token we issue has exp and jti.
+  const { sub, exp, jti } = payload;
+  if (!Number.isSafeInteger(sub) || !Number.isFinite(exp) || typeof jti !== 'string' || !jti) {
+    return null;
+  }
+  const user = store.findSessionUser(jti, sub);
+  return user ? { user, jti, expiresAt: exp * 1000 } : null;
 }
+
+/** Returns the user a token belongs to, or null (see verifySession). */
+export const authenticateToken = (token, deps) => verifySession(token, deps)?.user ?? null;
 
 export function cookieOptions(config) {
   return {
     httpOnly: true,
     sameSite: 'lax',
     secure: config.isProduction,
-    maxAge: SESSION_MS,
+    maxAge: SESSION_SECONDS * 1000,
     path: '/',
   };
 }
 
-export function setSessionCookie(res, user, config) {
-  res.cookie(COOKIE_NAME, signToken(user.id, config.jwtSecret), cookieOptions(config));
+export function setSessionCookie(res, user, { store, config }) {
+  const token = issueToken(user.id, { store, secret: config.jwtSecret });
+  res.cookie(COOKIE_NAME, token, cookieOptions(config));
 }
 
 export function clearSessionCookie(res, config) {
@@ -70,14 +90,20 @@ export function safeEqual(a, b) {
   return crypto.timingSafeEqual(digest(a), digest(b));
 }
 
-/** In-memory fixed-window limiter counting failed logins per key (IP). */
-export function createLoginLimiter({ maxFailures = 10, windowMs = 15 * 60 * 1000 } = {}) {
-  const failures = new Map(); // key -> { count, resetAt }
+/** Every registration attempt counts, so one IP can't script through the member slots. */
+export const REGISTER_RATE_LIMIT = { limit: 5, windowMs: 60 * 60 * 1000 };
+
+/**
+ * In-memory fixed-window limiter: at most `limit` recorded hits per key (IP) per window.
+ * Callers decide what counts as a hit (failed logins, wrong invite codes, every registration).
+ */
+export function createRateLimiter({ limit = 10, windowMs = 15 * 60 * 1000 } = {}) {
+  const hits = new Map(); // key -> { count, resetAt }
 
   const current = (key) => {
-    const entry = failures.get(key);
+    const entry = hits.get(key);
     if (entry && entry.resetAt <= Date.now()) {
-      failures.delete(key);
+      hits.delete(key);
       return undefined;
     }
     return entry;
@@ -87,18 +113,18 @@ export function createLoginLimiter({ maxFailures = 10, windowMs = 15 * 60 * 1000
     /** Seconds until the key may try again, or 0 if it isn't blocked. */
     retryAfter(key) {
       const entry = current(key);
-      if (!entry || entry.count < maxFailures) return 0;
+      if (!entry || entry.count < limit) return 0;
       return Math.ceil((entry.resetAt - Date.now()) / 1000);
     },
-    recordFailure(key) {
+    record(key) {
       const entry = current(key);
       if (entry) entry.count += 1;
-      else failures.set(key, { count: 1, resetAt: Date.now() + windowMs });
-      if (failures.size > 10_000) {
-        for (const k of failures.keys()) current(k);
+      else hits.set(key, { count: 1, resetAt: Date.now() + windowMs });
+      if (hits.size > 10_000) {
+        for (const k of hits.keys()) current(k);
       }
     },
-    /** Undoes one recorded failure, for attempts counted up front that then succeed. */
+    /** Undoes one recorded hit, for attempts counted up front that then succeed. */
     forgive(key) {
       const entry = current(key);
       if (entry && entry.count > 0) entry.count -= 1;
