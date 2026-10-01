@@ -1,11 +1,11 @@
 import { TYPING_THROTTLE_MS } from '@huddle/shared';
 import { parseCookie } from 'cookie';
-import jwt from 'jsonwebtoken';
 import { Server } from 'socket.io';
-import { COOKIE_NAME, authenticateToken } from './auth.js';
+import { COOKIE_NAME, verifySession } from './auth.js';
 
 const MEMBERS_ROOM = 'members';
 const MAX_TIMEOUT_MS = 2 ** 31 - 1; // setTimeout's ceiling (~24.8 days)
+const SESSION_SWEEP_MS = 60 * 1000;
 
 const userRoom = (userId) => `user:${userId}`;
 
@@ -34,16 +34,27 @@ export function createRealtime(httpServer, { store, config }) {
     const authenticated = [cookies[COOKIE_NAME], socket.handshake.auth?.token]
       .map((candidate) => ({
         token: candidate,
-        user: authenticateToken(candidate, { store, secret: config.jwtSecret }),
+        session: verifySession(candidate, { store, secret: config.jwtSecret }),
       }))
-      .find(({ user }) => user);
+      .find(({ session }) => session);
     if (!authenticated) return next(new Error('Not authenticated'));
-    const { token, user } = authenticated;
-    socket.data.user = user;
+    const { token, session } = authenticated;
+    socket.data.user = session.user;
     socket.data.token = token;
-    socket.data.expiresAt = jwt.decode(token).exp * 1000;
+    socket.data.jti = session.jti;
+    socket.data.expiresAt = session.expiresAt;
     next();
   });
+
+  // Sessions can also end outside this process (e.g. `npm run remove-user`), so periodically drop
+  // sockets whose session row is gone.
+  const sweep = setInterval(() => {
+    for (const socket of io.of('/').sockets.values()) {
+      if (!store.isSessionActive(socket.data.jti)) socket.disconnect(true);
+    }
+  }, config.sessionSweepMs ?? SESSION_SWEEP_MS);
+  sweep.unref();
+  httpServer.once('close', () => clearInterval(sweep));
 
   io.on('connection', (socket) => {
     const { user } = socket.data;

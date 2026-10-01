@@ -1,18 +1,20 @@
 import { Router } from 'express';
 import {
   COOKIE_NAME,
-  authenticateToken,
   clearSessionCookie,
   hashPassword,
   requireAuth,
   safeEqual,
   setSessionCookie,
   verifyPassword,
+  verifySession,
 } from '../auth.js';
 import { isUniqueViolation } from '../store.js';
 import { validateDisplayName, validatePassword, validateUsername } from '../validation.js';
 
-export function authRouter({ store, config, loginLimiter, inviteLimiter, broadcast, endSession }) {
+export function authRouter(deps) {
+  const { store, config, loginLimiter, inviteLimiter, registerLimiter, broadcast, endSession } =
+    deps;
   const router = Router();
   const fullError = `This server is full (max ${config.maxUsers} members)`;
 
@@ -22,6 +24,17 @@ export function authRouter({ store, config, loginLimiter, inviteLimiter, broadca
   };
 
   router.post('/register', async (req, res) => {
+    // With open registration, every attempt counts so one IP can't script through the member
+    // slots. With an invite code the code is the gate (wrong guesses are limited below), so a
+    // group signing up from one office or dorm IP isn't blocked halfway through.
+    if (!config.inviteCode) {
+      const registerRetryAfter = registerLimiter.retryAfter(req.ip);
+      if (registerRetryAfter > 0) {
+        return tooMany(res, registerRetryAfter, 'Too many registration attempts, try again later');
+      }
+      registerLimiter.record(req.ip);
+    }
+
     // Invite codes are the only gate on joining, so guessing them is rate limited like logins.
     const inviteRetryAfter = config.inviteCode ? inviteLimiter.retryAfter(req.ip) : 0;
     if (inviteRetryAfter > 0) {
@@ -38,7 +51,7 @@ export function authRouter({ store, config, loginLimiter, inviteLimiter, broadca
     if (display.error) return res.status(400).json({ error: display.error });
 
     if (config.inviteCode && !safeEqual(inviteCode, config.inviteCode)) {
-      inviteLimiter.recordFailure(req.ip);
+      inviteLimiter.record(req.ip);
       return res.status(403).json({ error: 'Invalid invite code' });
     }
     if (store.countUsers() >= config.maxUsers) return res.status(403).json({ error: fullError });
@@ -60,7 +73,7 @@ export function authRouter({ store, config, loginLimiter, inviteLimiter, broadca
       throw err;
     }
 
-    setSessionCookie(res, user, config);
+    setSessionCookie(res, user, { store, config });
     broadcast('user:joined', { user });
     res.status(201).json({ user });
   });
@@ -78,7 +91,7 @@ export function authRouter({ store, config, loginLimiter, inviteLimiter, broadca
 
     // Count the attempt before the slow bcrypt compare so a parallel burst can't slip past the
     // limit; a successful login takes it back.
-    loginLimiter.recordFailure(req.ip);
+    loginLimiter.record(req.ip);
     const credentials = store.findCredentials(username);
     const valid = await verifyPassword(password, credentials?.passwordHash);
     if (!credentials || !valid) {
@@ -87,15 +100,19 @@ export function authRouter({ store, config, loginLimiter, inviteLimiter, broadca
     loginLimiter.forgive(req.ip);
 
     const user = store.findUserById(credentials.id);
-    setSessionCookie(res, user, config);
+    setSessionCookie(res, user, { store, config });
     res.json({ user });
   });
 
   router.post('/logout', async (req, res) => {
     const token = req.cookies?.[COOKIE_NAME];
-    const user = authenticateToken(token, { store, secret: config.jwtSecret });
-    // The socket was authenticated once at handshake; close it so it stops receiving events.
-    if (user) await endSession(user.id, token);
+    const session = verifySession(token, { store, secret: config.jwtSecret });
+    if (session) {
+      // Revoke the token server-side so a copy of the cookie stops working too, then close the
+      // sockets it opened (they were authenticated once, at handshake).
+      store.deleteSession(session.jti);
+      await endSession(session.user.id, token);
+    }
     clearSessionCookie(res, config);
     res.status(204).end();
   });

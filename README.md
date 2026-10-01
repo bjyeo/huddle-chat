@@ -13,11 +13,11 @@ A small, self-hosted, Discord-style group chat for up to **10 people**: text cha
 ## Features
 
 - Register / log in / log out; sessions survive reloads (7-day cookie)
-- Hard cap of 10 members (`MAX_USERS`), optional invite code (`INVITE_CODE`)
+- Hard cap of 10 members (`MAX_USERS`), invite code (`INVITE_CODE`, required in production), `remove-user` admin script
 - Channels: create, delete your own (`#general` is permanent), unread indicators
 - Realtime messages over WebSockets, edit/delete your own messages, infinite scroll history
 - Online/offline member list and "is typing…" indicators
-- Login rate limiting, server-side ownership checks, parameterized SQL, no HTML rendering of messages
+- Revocable server-side sessions, login/registration rate limiting, server-side ownership checks, parameterized SQL, no HTML rendering of messages
 
 ## Getting started
 
@@ -33,7 +33,7 @@ Open http://localhost:5173, register the first account, and share the URL with y
 ### Production
 
 ```bash
-cp .env.example server/.env   # set a strong JWT_SECRET
+cp .env.example server/.env   # then set JWT_SECRET and INVITE_CODE (see Security)
 npm run build                 # builds client/dist
 NODE_ENV=production npm start # serves API, websockets and the built app on PORT
 ```
@@ -41,9 +41,39 @@ NODE_ENV=production npm start # serves API, websockets and the built app on PORT
 Put it behind HTTPS (e.g. Caddy or nginx) so the `Secure` cookie works, and set:
 
 - `CLIENT_ORIGIN=https://chat.example.com` — the public URL (websocket connections from any other origin are refused)
-- `TRUST_PROXY=1` — one proxy in front, so login rate limiting sees real client IPs
+- `TRUST_PROXY=1` — one proxy in front, so rate limiting sees real client IPs
 
 The SQLite file lives at `server/data/huddle.db` by default — back it up.
+
+### Security
+
+In production the server refuses to start unless:
+
+- `JWT_SECRET` is a unique random value of at least 32 characters. Placeholders such as `change-me` or
+  `secret` are rejected, since anyone who knows the secret can forge a login for any member. Generate one with
+  `node -e "console.log(require('crypto').randomBytes(48).toString('hex'))"`.
+- `INVITE_CODE` is set, so strangers can't register and take the member slots. To run open registration on
+  purpose, set `ALLOW_OPEN_REGISTRATION=true` instead.
+
+Sessions are stored server-side: logging out revokes that session everywhere, including copies of the
+cookie. With open registration (`ALLOW_OPEN_REGISTRATION=true`) sign-ups are limited to 5 attempts per
+IP per hour; with an invite code there is no such cap, so a whole group can join from one office IP.
+Failed logins and wrong invite codes are limited to 10 per IP per 15 minutes.
+Upgrading from a version without server-side sessions logs everyone out once.
+
+### Administration
+
+There is no in-app admin. To remove a member (for example to free a slot on a full server), run on the
+server host:
+
+```bash
+npm run remove-user -w server -- <username>
+```
+
+It reads `DATABASE_PATH` from `server/.env` like the server, works while the server is running, and prints
+what it did. The member's messages and sessions are deleted (their open tabs are disconnected within a
+minute); channels they created stay, with no owner, so like `#general` they can no longer be deleted.
+Other members' open tabs keep showing the removed member and their messages until they reload.
 
 ### Configuration
 

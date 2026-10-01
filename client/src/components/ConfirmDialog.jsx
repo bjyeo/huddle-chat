@@ -1,32 +1,35 @@
-import { useId } from 'react';
+import { useId, useRef } from 'react';
 import { createPortal } from 'react-dom';
 import { useAsyncAction } from '../hooks/useAsyncAction.js';
+import { useModalFocus } from '../hooks/useModalFocus.js';
 
-/** In-app confirmation modal. Calls `onClose` after a successful `onConfirm`. */
+/**
+ * In-app confirmation modal. Calls `onClose` after a successful `onConfirm`. Focus starts on
+ * Cancel (the safe choice), stays inside the dialog and returns to the opener on close.
+ */
 export function ConfirmDialog({ title, children, confirmLabel = 'Delete', onConfirm, onClose }) {
   const { run, pending, error } = useAsyncAction(onConfirm);
   const titleId = useId();
   const bodyId = useId();
+  const dialogRef = useRef(null);
+  const cancelRef = useRef(null);
+  useModalFocus({ dialogRef, initialFocusRef: cancelRef, onClose });
 
   const confirm = async () => {
     if (await run()) onClose();
   };
 
-  const onKeyDown = (event) => {
-    if (event.key !== 'Escape') return;
-    event.stopPropagation();
-    onClose();
-  };
-
+  // Portalled outside #root so it stays interactive while useModalFocus makes the app inert.
   return createPortal(
     <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
       <div
+        ref={dialogRef}
         className="modal"
         role="alertdialog"
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={bodyId}
-        onKeyDown={onKeyDown}
+        tabIndex={-1}
       >
         <h2 id={titleId} className="modal__title">
           {title}
@@ -40,7 +43,7 @@ export function ConfirmDialog({ title, children, confirmLabel = 'Delete', onConf
           </p>
         )}
         <div className="modal__actions">
-          <button type="button" className="btn btn--ghost" onClick={onClose} autoFocus>
+          <button ref={cancelRef} type="button" className="btn btn--ghost" onClick={onClose}>
             Cancel
           </button>
           <button type="button" className="btn btn--danger" onClick={confirm} disabled={pending}>

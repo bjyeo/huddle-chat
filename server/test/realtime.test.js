@@ -1,13 +1,13 @@
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, it } from 'node:test';
 import { TYPING_THROTTLE_MS } from '@huddle/shared';
-import jwt from 'jsonwebtoken';
 import request from 'supertest';
 import {
   PASSWORD,
   collectEvents,
   connectSocket,
   generalChannel,
+  issueTestToken,
   registerUser,
   sessionCookie,
   startServer,
@@ -199,10 +199,7 @@ describe('realtime', () => {
   });
 
   it('disconnects a socket when its session token expires', async () => {
-    const token = jwt.sign(
-      { sub: alice.user.id, exp: Math.floor(Date.now() / 1000) + 1 },
-      server.config.jwtSecret,
-    );
+    const token = issueTestToken(server, alice.user.id, { ttlSeconds: 2 });
     const socket = await connect(alice, { auth: { token } });
     const reason = await new Promise((resolve) => socket.once('disconnect', resolve));
     assert.equal(reason, 'io server disconnect');

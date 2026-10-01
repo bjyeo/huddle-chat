@@ -6,7 +6,7 @@ import cookieParser from 'cookie-parser';
 import cors from 'cors';
 import express from 'express';
 import helmet from 'helmet';
-import { createLoginLimiter, requireAuth } from './auth.js';
+import { REGISTER_RATE_LIMIT, createRateLimiter, requireAuth } from './auth.js';
 import { createRealtime } from './realtime.js';
 import { authRouter } from './routes/auth.js';
 import { channelsRouter } from './routes/channels.js';
@@ -31,8 +31,10 @@ export function createApp({ db, config, clientDist = CLIENT_DIST }) {
     broadcast: realtime.broadcast,
     isOnline: realtime.isOnline,
     endSession: realtime.endSession,
-    loginLimiter: createLoginLimiter(),
-    inviteLimiter: createLoginLimiter(),
+    loginLimiter: createRateLimiter(),
+    inviteLimiter: createRateLimiter(),
+    // Tests raise the limit via config; production always uses the default.
+    registerLimiter: createRateLimiter(config.registerRateLimit ?? REGISTER_RATE_LIMIT),
   };
 
   // Makes req.ip (used by the rate limiters) the real client IP behind N trusted proxies.

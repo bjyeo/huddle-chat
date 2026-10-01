@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import { io as ioClient } from 'socket.io-client';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
+import { issueToken } from '../src/auth.js';
 import { openDatabase } from '../src/db.js';
+import { createStore } from '../src/store.js';
 
 export const PASSWORD = 'correct-horse-battery';
 
@@ -15,8 +17,13 @@ export function testConfig(overrides = {}) {
     databasePath: ':memory:',
     maxUsers: 10,
     inviteCode: null,
+    allowOpenRegistration: true,
     clientOrigin: 'http://localhost:5173',
     trustProxy: 0,
+    // Test-only knobs (loadConfig never sets them): suites register more than the production
+    // limit of 5 users from 127.0.0.1, and sockets of revoked sessions should drop quickly.
+    registerRateLimit: { limit: 1000, windowMs: 60 * 60 * 1000 },
+    sessionSweepMs: 100,
     ...overrides,
   };
 }
@@ -38,6 +45,12 @@ export async function startServer(overrides = {}) {
       db.close();
     },
   };
+}
+
+/** Issues a real session token for a user directly, e.g. with a short `ttlSeconds`. */
+export function issueTestToken(server, userId, options = {}) {
+  const store = createStore(server.db);
+  return issueToken(userId, { store, secret: server.config.jwtSecret, ...options });
 }
 
 /** Extracts `token=...` from a response's Set-Cookie header. */
