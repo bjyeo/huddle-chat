@@ -109,6 +109,24 @@ describe('useMessages', () => {
     );
   });
 
+  it('keeps messages that arrive over the socket while the first page is loading', async () => {
+    let respond;
+    mockFetch({
+      'GET /api/channels/1/messages': () => new Promise((resolve) => (respond = resolve)),
+    });
+    const { result } = renderHook(() => useMessages(1), { wrapper: SocketProvider });
+    await waitFor(() => expect(respond).toBeDefined());
+
+    act(() => socket.serverEmit('message:created', { message: makeMessage({ id: 3 }) }));
+    // The page was computed before message 3 existed.
+    await act(async () =>
+      respond([200, { messages: [makeMessage({ id: 1 }), makeMessage({ id: 2 })] }]),
+    );
+
+    expect(result.current.loading).toBe(false);
+    expect(result.current.messages.map((m) => m.id)).toEqual([1, 2, 3]);
+  });
+
   it('switches channels without leaking the previous channel', async () => {
     mockFetch({
       'GET /api/channels/1/messages': [200, { messages: [makeMessage({ id: 1 })] }],

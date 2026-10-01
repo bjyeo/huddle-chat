@@ -4,7 +4,7 @@ import { useAuth } from './hooks/useAuth.jsx';
 import { SocketProvider } from './hooks/useSocket.jsx';
 
 export function App() {
-  const { user, loading } = useAuth();
+  const { user, loading, revalidate } = useAuth();
 
   if (loading) {
     return (
@@ -17,7 +17,7 @@ export function App() {
 
   // The socket lives exactly as long as the session: logging out unmounts it.
   return (
-    <SocketProvider>
+    <SocketProvider onAuthLost={revalidate}>
       <ChatApp />
     </SocketProvider>
   );

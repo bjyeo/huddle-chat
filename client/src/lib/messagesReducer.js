@@ -40,14 +40,18 @@ export function messagesReducer(state, action) {
   if (action.channelId !== state.channelId) return state;
 
   switch (action.type) {
-    case 'loaded':
+    case 'loaded': {
+      // Socket events can land while the first page is in flight; keep anything newer than it.
+      const lastId = action.messages.at(-1)?.id ?? 0;
+      const arrived = state.messages.filter((m) => m.id > lastId);
       return {
         ...state,
         loading: false,
         error: null,
-        messages: action.messages,
+        messages: [...action.messages, ...arrived],
         hasMore: action.messages.length === PAGE_SIZE,
       };
+    }
     case 'failed':
       return { ...state, loading: false, error: action.error };
     case 'older':

@@ -13,7 +13,9 @@ export function createFakeSocket() {
   return {
     on: on(listeners),
     off: off(listeners),
+    connected: false,
     emit: vi.fn(),
+    connect: vi.fn(),
     disconnect: vi.fn(),
     io: { on: on(managerListeners), off: off(managerListeners) },
     serverEmit(event, payload) {
@@ -32,14 +34,15 @@ const json = (status, body) =>
 
 /**
  * Stubs global fetch with a route table: `{ 'POST /api/auth/login': [200, { user }] }`.
- * A route value may also be a function `(init) => [status, body]`. Unknown routes → 404.
+ * A route value may also be a (possibly async) function `(init) => [status, body]`.
+ * Unknown routes → 404.
  */
 export function mockFetch(routes) {
   const fetchMock = vi.fn(async (url, init = {}) => {
     const path = new URL(url, 'http://localhost').pathname;
     const route = routes[`${init.method ?? 'GET'} ${path}`];
     const [status, body] =
-      typeof route === 'function' ? route(init) : (route ?? [404, { error: 'Not found' }]);
+      typeof route === 'function' ? await route(init) : (route ?? [404, { error: 'Not found' }]);
     return json(status, body);
   });
   vi.stubGlobal('fetch', fetchMock);

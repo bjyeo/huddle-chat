@@ -41,9 +41,21 @@ export function AuthProvider({ children }) {
     }
   }, []);
 
+  /** Re-checks the session with the server; resolves false (and logs out) if it has ended. */
+  const revalidate = useCallback(async () => {
+    try {
+      const { user } = await api.getMe();
+      setUser(user);
+      return true;
+    } catch (err) {
+      if (err.status === 401) setUser(null);
+      return false;
+    }
+  }, []);
+
   const value = useMemo(
-    () => ({ user, loading, login, register, logout }),
-    [user, loading, login, register, logout],
+    () => ({ user, loading, login, register, logout, revalidate }),
+    [user, loading, login, register, logout, revalidate],
   );
   return <AuthContext value={value}>{children}</AuthContext>;
 }
