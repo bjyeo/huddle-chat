@@ -61,7 +61,8 @@ export function messagesReducer(state, action) {
         hasMore: action.messages.length === PAGE_SIZE,
       };
     case 'latest':
-      return mergeLatest(state, action.messages);
+      // A successful re-sync also recovers from a failed first load.
+      return { ...mergeLatest(state, action.messages), loading: false, error: null };
     case 'upsert':
       return { ...state, messages: upsert(state.messages, action.message) };
     case 'update':

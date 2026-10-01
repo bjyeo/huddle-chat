@@ -127,6 +127,26 @@ describe('useMessages', () => {
     expect(result.current.messages.map((m) => m.id)).toEqual([1, 2, 3]);
   });
 
+  it('clears a failed first load once a reconnect re-sync succeeds', async () => {
+    let fail = true;
+    mockFetch({
+      'GET /api/channels/1/messages': () =>
+        fail
+          ? [500, { error: 'Internal server error' }]
+          : [200, { messages: [makeMessage({ id: 1 })] }],
+    });
+    const { result } = await renderMessages();
+    expect(result.current.error).toBe('Internal server error');
+
+    fail = false;
+    act(() => socket.serverEmit('connect'));
+    act(() => socket.serverEmit('disconnect'));
+    act(() => socket.serverEmit('connect'));
+
+    await waitFor(() => expect(result.current.messages.map((m) => m.id)).toEqual([1]));
+    expect(result.current.error).toBeNull();
+  });
+
   it('switches channels without leaking the previous channel', async () => {
     mockFetch({
       'GET /api/channels/1/messages': [200, { messages: [makeMessage({ id: 1 })] }],
