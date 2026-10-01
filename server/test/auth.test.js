@@ -50,6 +50,18 @@ describe('POST /api/auth/register', () => {
     assert.equal(typeof res.body.error, 'string');
   });
 
+  it('returns 409 to the loser of two concurrent registrations for one username', async () => {
+    // Both pass the "taken?" check before either insert lands (bcrypt hashing runs in between),
+    // so the UNIQUE constraint has to turn the second insert into a 409, not a 500.
+    const register = (username) =>
+      server.request().post('/api/auth/register').send({ username, password: PASSWORD });
+    const results = await Promise.all([register('Racer'), register('racer')]);
+    assert.deepEqual(results.map((res) => res.status).sort(), [201, 409]);
+    const loser = results.find((res) => res.status === 409);
+    assert.equal(loser.body.error, 'Username is already taken');
+    assert.equal(sessionCookie(loser), undefined);
+  });
+
   for (const [label, body] of [
     ['missing body fields', {}],
     ['short username', { username: 'ab', password: PASSWORD }],
@@ -152,6 +164,20 @@ describe('login, logout and /me', () => {
     }
   });
 
+  for (const [label, body] of [
+    ['an empty body', {}],
+    ['a missing password', { username: 'erin' }],
+    ['an array username', { username: ['erin'], password: PASSWORD }],
+    ['a numeric password', { username: 'erin', password: 12345678 }],
+  ]) {
+    it(`rejects ${label} with 400`, async () => {
+      const res = await server.request().post('/api/auth/login').send(body);
+      assert.equal(res.status, 400);
+      assert.equal(res.body.error, 'Username and password are required');
+      assert.equal(sessionCookie(res), undefined);
+    });
+  }
+
   it('returns 401 from /me without a valid cookie', async () => {
     for (const cookie of [undefined, 'token=garbage', `token=${jwt.sign({ sub: 1 }, 'other')}`]) {
       const req = server.request().get('/api/auth/me');
@@ -206,6 +232,46 @@ describe('login rate limiting', () => {
       assert.equal(blocked.status, 429);
       assert.equal(typeof blocked.body.error, 'string');
       assert.ok(Number(blocked.headers['retry-after']) > 0);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('does not count malformed requests as failed attempts', async () => {
+    const server = await startServer();
+    try {
+      await registerUser(server, 'gina');
+      for (let i = 0; i < 12; i++) {
+        const res = await server.request().post('/api/auth/login').send({ username: 'gina' });
+        assert.equal(res.status, 400);
+      }
+      const ok = await server
+        .request()
+        .post('/api/auth/login')
+        .send({ username: 'gina', password: PASSWORD });
+      assert.equal(ok.status, 200);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('lets the IP try again once the 15 minute window has passed', async (t) => {
+    // t.mock is restored when the test ends, even if it fails.
+    t.mock.timers.enable({ apis: ['Date'], now: Date.now() });
+    const server = await startServer();
+    try {
+      await registerUser(server, 'hank');
+      const login = (password) =>
+        server.request().post('/api/auth/login').send({ username: 'hank', password });
+      for (let i = 0; i < 10; i++) assert.equal((await login('nope-nope')).status, 401);
+      const blocked = await login(PASSWORD);
+      assert.equal(blocked.status, 429);
+      assert.ok(Number(blocked.headers['retry-after']) <= 15 * 60);
+
+      t.mock.timers.tick(15 * 60 * 1000 - 1000);
+      assert.equal((await login(PASSWORD)).status, 429);
+      t.mock.timers.tick(1000);
+      assert.equal((await login(PASSWORD)).status, 200);
     } finally {
       await server.stop();
     }
