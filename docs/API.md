@@ -56,6 +56,10 @@ the server (authoritative) and the client (instant form feedback). Change them t
 | users           | **max 10 registered users** (env `MAX_USERS`, default 10)                          |
 | channels        | max 50                                                                             |
 
+"Trim" also treats text made only of invisible characters (zero-width spaces and joiners, bidi marks, Hangul
+fillers — Unicode `Default_Ignorable_Code_Point`) as blank: such content is rejected as empty, such a display name
+falls back to the username and such a topic is stored as `""`. Visible text keeps its invisible characters.
+
 ## REST endpoints
 
 ### Health

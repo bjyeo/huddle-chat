@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
 import {
   CHANNEL_NAME_RE,
+  isBlank,
   isProtectedChannel,
   normalizeChannelName,
   validateChannelName,
@@ -60,6 +61,7 @@ describe('user fields', () => {
   it('trims display names and falls back to the username', () => {
     assert.deepEqual(validateDisplayName('  Alice  ', 'alice'), { value: 'Alice' });
     assert.deepEqual(validateDisplayName('   ', 'alice'), { value: 'alice' });
+    assert.deepEqual(validateDisplayName('\u200b\u3164', 'alice'), { value: 'alice' });
     assert.deepEqual(validateDisplayName(undefined, 'alice'), { value: 'alice' });
     assert.ok(validateDisplayName('x'.repeat(33), 'alice').error);
     assert.ok(validateDisplayName(5, 'alice').error);
@@ -69,6 +71,7 @@ describe('user fields', () => {
 describe('topic and content', () => {
   it('trims topics and caps them at 120 characters', () => {
     assert.deepEqual(validateTopic(undefined), { value: '' });
+    assert.deepEqual(validateTopic('\u200b \u200e'), { value: '' });
     assert.deepEqual(validateTopic(` ${'t'.repeat(120)} `), { value: 't'.repeat(120) });
     assert.ok(validateTopic('t'.repeat(121)).error);
   });
@@ -77,8 +80,23 @@ describe('topic and content', () => {
     assert.deepEqual(validateContent('  hi  '), { value: 'hi' });
     assert.deepEqual(validateContent('y'.repeat(2000)), { value: 'y'.repeat(2000) });
     assert.ok(validateContent('   ').error);
+    // Zero-width space/joiner, word joiner, BOM, bidi override, soft hyphen, Hangul filler.
+    assert.ok(validateContent('\u200b\u200d\u2060\ufeff\u202e\u00ad\u3164').error);
+    // Visible text keeps its invisible characters (e.g. emoji joiners).
+    assert.deepEqual(validateContent('👨\u200d👩\u200d👧'), { value: '👨\u200d👩\u200d👧' });
     assert.ok(validateContent('y'.repeat(2001)).error);
     assert.ok(validateContent(null).error);
+  });
+});
+
+describe('isBlank', () => {
+  it('is true only for whitespace and invisible characters', () => {
+    for (const blank of ['', ' \n\t', '\u200b', '\u200d\u2060\ufeff', '\u202e\u00ad', '\u3164']) {
+      assert.equal(isBlank(blank), true, JSON.stringify(blank));
+    }
+    for (const visible of ['a', ' a\u200b', '👍', '👨\u200d👩\u200d👧', '-']) {
+      assert.equal(isBlank(visible), false, JSON.stringify(visible));
+    }
   });
 });
 

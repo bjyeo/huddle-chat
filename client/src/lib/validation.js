@@ -13,6 +13,7 @@ export {
   DISPLAY_NAME_MAX,
   MESSAGE_MAX,
   TOPIC_MAX,
+  isBlank,
   normalizeChannelName,
 } from '@huddle/shared';
 

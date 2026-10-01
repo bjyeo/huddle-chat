@@ -41,6 +41,11 @@ describe('POST /api/auth/register', () => {
     assert.equal(user.displayName, 'bob_99');
   });
 
+  it('treats an invisible-only displayName as blank', async () => {
+    const { user } = await registerUser(server, 'ghost', { displayName: '\u200b\u3164' });
+    assert.equal(user.displayName, 'ghost');
+  });
+
   it('rejects usernames that are taken case-insensitively with 409', async () => {
     const res = await server
       .request()

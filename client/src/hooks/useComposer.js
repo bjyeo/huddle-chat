@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { MESSAGE_MAX } from '../lib/validation.js';
+import { MESSAGE_MAX, isBlank } from '../lib/validation.js';
 import { useAsyncAction } from './useAsyncAction.js';
 
 /** Draft state for the message composer. */
@@ -8,12 +8,12 @@ export function useComposer({ send, notifyTyping }) {
   const { run, pending, error, setError } = useAsyncAction(send);
   const content = draft.trim();
   const remaining = MESSAGE_MAX - content.length;
-  const canSend = content.length > 0 && remaining >= 0 && !pending;
+  const canSend = !isBlank(content) && remaining >= 0 && !pending;
 
   const change = (value) => {
     setDraft(value);
     setError(null);
-    if (value.trim()) notifyTyping();
+    if (!isBlank(value)) notifyTyping();
   };
 
   const submit = async () => {
