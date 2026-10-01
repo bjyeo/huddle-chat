@@ -11,10 +11,11 @@ export function ChatView({ channel, currentUserId }) {
   );
   const { typers, notifyTyping } = useTyping(channel.id);
 
+  // Sibling keys must differ: remounting both per channel resets scroll and draft state.
   return (
     <>
       <MessageList
-        key={channel.id}
+        key={`messages-${channel.id}`}
         channel={channel}
         currentUserId={currentUserId}
         messages={messages}
@@ -27,7 +28,7 @@ export function ChatView({ channel, currentUserId }) {
       />
       <TypingIndicator typers={typers} />
       <Composer
-        key={channel.id}
+        key={`composer-${channel.id}`}
         channelName={channel.name}
         send={send}
         notifyTyping={notifyTyping}
