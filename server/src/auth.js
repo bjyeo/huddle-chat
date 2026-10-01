@@ -5,6 +5,8 @@ import jwt from 'jsonwebtoken';
 export const COOKIE_NAME = 'token';
 const SESSION_SECONDS = 7 * 24 * 60 * 60;
 const BCRYPT_COST = 10;
+// Older sessions are evicted past this, so repeated logins can't grow the table without bound.
+export const MAX_SESSIONS_PER_USER = 20;
 
 // Compared against when the username doesn't exist, so unknown users cost the same time.
 const DUMMY_HASH = '$2b$10$Fx1DfrpwkVG2EcJ34bq6ku8QGZiqLTUzQryONZUGeI/xJffI3n8va';
@@ -23,7 +25,12 @@ export function issueToken(userId, { store, secret, ttlSeconds = SESSION_SECONDS
   const exp = iat + ttlSeconds;
   // A random jti makes every login a distinct session, even two within the same second.
   const jti = crypto.randomUUID();
-  store.createSession({ jti, userId, expiresAt: new Date(exp * 1000).toISOString() });
+  store.createSession({
+    jti,
+    userId,
+    expiresAt: new Date(exp * 1000).toISOString(),
+    maxPerUser: MAX_SESSIONS_PER_USER,
+  });
   return jwt.sign({ sub: userId, iat, exp, jti }, secret, { algorithm: 'HS256' });
 }
 

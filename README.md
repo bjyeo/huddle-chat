@@ -58,7 +58,9 @@ In production the server refuses to start unless:
 Sessions are stored server-side: logging out revokes that session everywhere, including copies of the
 cookie. With open registration (`ALLOW_OPEN_REGISTRATION=true`) sign-ups are limited to 5 attempts per
 IP per hour; with an invite code there is no such cap, so a whole group can join from one office IP.
-Failed logins and wrong invite codes are limited to 10 per IP per 15 minutes.
+Failed logins and wrong invite codes are limited to 10 per IP per 15 minutes. All limits key on the client
+IP, so behind a reverse proxy set `TRUST_PROXY` (usually `1`) — otherwise every visitor shares the proxy's IP
+and one person can exhaust a limit for everyone. Each user keeps at most 20 sessions; older ones are evicted.
 Upgrading from a version without server-side sessions logs everyone out once.
 
 ### Administration

@@ -89,6 +89,11 @@ export function createStore(db) {
     insertSession: db.prepare(
       'INSERT INTO sessions (jti, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)',
     ),
+    // Keeps a user's newest `limit` sessions (rowid breaks ties within the same millisecond).
+    pruneUserSessions: db.prepare(
+      `DELETE FROM sessions WHERE user_id = ? AND rowid NOT IN (
+         SELECT rowid FROM sessions WHERE user_id = ? ORDER BY created_at DESC, rowid DESC LIMIT ?)`,
+    ),
     sessionUser: db.prepare(
       `SELECT u.id, u.username, u.display_name, u.created_at
        FROM sessions s JOIN users u ON u.id = s.user_id
@@ -157,8 +162,12 @@ export function createStore(db) {
     },
     deleteMessage: (id) => sql.deleteMessage.run(id).changes > 0,
 
-    createSession({ jti, userId, expiresAt }) {
-      sql.insertSession.run(jti, userId, now(), expiresAt);
+    /** Stores a session and evicts the user's oldest ones beyond `maxPerUser`. */
+    createSession({ jti, userId, expiresAt, maxPerUser }) {
+      transaction(() => {
+        sql.insertSession.run(jti, userId, now(), expiresAt);
+        sql.pruneUserSessions.run(userId, userId, maxPerUser);
+      });
     },
     /** The user owning an unexpired session `jti`, if it belongs to `userId`. */
     findSessionUser: (jti, userId) => toUser(sql.sessionUser.get(jti, userId, now())),
