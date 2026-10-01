@@ -30,9 +30,15 @@ export function createRealtime(httpServer, { store, config }) {
 
   io.use((socket, next) => {
     const cookies = parseCookie(socket.handshake.headers.cookie ?? '');
-    const token = cookies[COOKIE_NAME] ?? socket.handshake.auth?.token;
-    const user = authenticateToken(token, { store, secret: config.jwtSecret });
-    if (!user) return next(new Error('Not authenticated'));
+    // Try the cookie first, then handshake auth, so a stale cookie can't mask a valid token.
+    const authenticated = [cookies[COOKIE_NAME], socket.handshake.auth?.token]
+      .map((candidate) => ({
+        token: candidate,
+        user: authenticateToken(candidate, { store, secret: config.jwtSecret }),
+      }))
+      .find(({ user }) => user);
+    if (!authenticated) return next(new Error('Not authenticated'));
+    const { token, user } = authenticated;
     socket.data.user = user;
     socket.data.token = token;
     socket.data.expiresAt = jwt.decode(token).exp * 1000;

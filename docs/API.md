@@ -8,7 +8,9 @@ This is the single source of truth shared by `server/` and `client/`. Both sides
 - Errors always look like `{ "error": "Human readable message" }` with an appropriate status code.
 - Timestamps are ISO-8601 strings (`2026-10-01T12:00:00.000Z`).
 - IDs are integers.
-- Authentication uses a JWT stored in an **httpOnly cookie named `token`** (`SameSite=Lax`, `Secure` in production, 7 day expiry, payload `{ sub: userId }`).
+- Authentication uses a JWT stored in an **httpOnly cookie named `token`** (`SameSite=Lax`, `Secure` in production, 7 day expiry, payload `{ sub: userId, jti }`).
+  Tokens are stateless: logout clears the cookie and closes that session's sockets, but a token copied
+  before logout stays valid until it expires. Rotate `JWT_SECRET` to invalidate every session at once.
   The client never touches the token directly; it sends requests with `credentials: 'include'`.
 - Every endpoint except `register`, `login`, `logout` and `GET /api/health` requires auth → `401 { error: "Not authenticated" }` otherwise.
 

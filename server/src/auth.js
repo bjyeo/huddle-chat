@@ -98,5 +98,10 @@ export function createLoginLimiter({ maxFailures = 10, windowMs = 15 * 60 * 1000
         for (const k of failures.keys()) current(k);
       }
     },
+    /** Undoes one recorded failure, for attempts counted up front that then succeed. */
+    forgive(key) {
+      const entry = current(key);
+      if (entry && entry.count > 0) entry.count -= 1;
+    },
   };
 }

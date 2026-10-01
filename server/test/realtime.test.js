@@ -58,6 +58,12 @@ describe('realtime', () => {
     assert.ok(socket.connected);
   });
 
+  it('uses a valid handshake auth token even when a stale cookie is present', async () => {
+    const token = alice.cookie.slice('token='.length);
+    const socket = await connect(alice, { cookie: 'token=stale', auth: { token } });
+    assert.ok(socket.connected);
+  });
+
   it('rejects websocket handshakes from foreign origins', async () => {
     await assert.rejects(
       connectSocket(server, { cookie: alice.cookie, origin: 'https://evil.example' }),

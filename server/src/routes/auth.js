@@ -76,12 +76,15 @@ export function authRouter({ store, config, loginLimiter, inviteLimiter, broadca
       return res.status(400).json({ error: 'Username and password are required' });
     }
 
+    // Count the attempt before the slow bcrypt compare so a parallel burst can't slip past the
+    // limit; a successful login takes it back.
+    loginLimiter.recordFailure(req.ip);
     const credentials = store.findCredentials(username);
     const valid = await verifyPassword(password, credentials?.passwordHash);
     if (!credentials || !valid) {
-      loginLimiter.recordFailure(req.ip);
       return res.status(401).json({ error: 'Invalid username or password' });
     }
+    loginLimiter.forgive(req.ip);
 
     const user = store.findUserById(credentials.id);
     setSessionCookie(res, user, config);

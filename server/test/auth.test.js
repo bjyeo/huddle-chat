@@ -224,6 +224,25 @@ describe('login rate limiting', () => {
       Promise.resolve(),
     );
 
+  it('cannot be bypassed by a parallel burst of attempts', async () => {
+    const server = await startServer();
+    try {
+      const burst = await Promise.all(
+        Array.from({ length: 15 }, () =>
+          server
+            .request()
+            .post('/api/auth/login')
+            .send({ username: 'nobody', password: 'nope-nope' }),
+        ),
+      );
+      const statuses = burst.map((res) => res.status);
+      assert.equal(statuses.filter((s) => s === 401).length, 10);
+      assert.equal(statuses.filter((s) => s === 429).length, 5);
+    } finally {
+      await server.stop();
+    }
+  });
+
   it('limits per client IP behind a trusted proxy (TRUST_PROXY)', async () => {
     const server = await startServer({ trustProxy: 1 });
     try {
