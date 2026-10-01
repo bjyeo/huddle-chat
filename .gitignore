@@ -1,0 +1,15 @@
+node_modules/
+dist/
+coverage/
+.env
+.env.*
+!.env.example
+server/data/
+*.db
+*.db-journal
+*.db-wal
+*.db-shm
+.DS_Store
+*.log
+.claude/settings.local.json
+.claude/worktrees/

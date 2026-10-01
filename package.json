@@ -1,0 +1,26 @@
+{
+  "name": "huddle",
+  "version": "1.0.0",
+  "private": true,
+  "description": "A small Discord-style group chat for up to 10 people",
+  "workspaces": [
+    "server",
+    "client"
+  ],
+  "scripts": {
+    "dev": "concurrently -n server,client -c blue,magenta \"npm run dev -w server\" \"npm run dev -w client\"",
+    "build": "npm run build -w client",
+    "start": "npm run start -w server",
+    "test": "npm test -w server && npm test -w client",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "prepare": "git config core.hooksPath .githooks || true"
+  },
+  "devDependencies": {
+    "concurrently": "^9.2.0",
+    "prettier": "^3.6.0"
+  },
+  "engines": {
+    "node": ">=22.13"
+  }
+}

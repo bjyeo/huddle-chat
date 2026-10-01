@@ -1,0 +1,14 @@
+#!/bin/sh
+# Git pre-commit hook (enabled by `npm install` via core.hooksPath=.githooks).
+# Checks formatting of staged files so CI's format check never surprises you.
+files=$(git diff --cached --name-only --diff-filter=ACMR | grep -E '\.(m?[jt]sx?|cjs|json|css|html|md|ya?ml)$')
+[ -z "$files" ] && exit 0
+if [ ! -x node_modules/.bin/prettier ] && [ ! -f node_modules/.bin/prettier.cmd ]; then
+  echo "pre-commit: prettier not installed, skipping format check (run npm install)"
+  exit 0
+fi
+echo "$files" | xargs npx --no-install prettier --check --ignore-unknown || {
+  echo ""
+  echo "pre-commit: formatting issues found. Run 'npm run format' and re-stage."
+  exit 1
+}
