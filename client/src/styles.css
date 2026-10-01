@@ -174,13 +174,14 @@ ol {
   background: var(--brand-hover);
 }
 
+/* White on --danger is only 3.77:1; these fills keep the label at AA (4.57:1 and 6.19:1). */
 .btn--danger {
-  background: var(--danger);
+  background: var(--danger-hover);
   color: #fff;
 }
 
 .btn--danger:hover:not(:disabled) {
-  background: var(--danger-hover);
+  background: #b8292e;
 }
 
 .btn--ghost {
