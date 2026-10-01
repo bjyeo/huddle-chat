@@ -33,6 +33,9 @@ export function createApp({ db, config, clientDist = CLIENT_DIST }) {
     loginLimiter: createLoginLimiter(),
   };
 
+  // Makes req.ip (used by the login limiter) the real client IP behind N trusted proxies.
+  if (config.trustProxy) app.set('trust proxy', config.trustProxy);
+
   // Helmet's default CSP (script-src 'self', connect-src via default-src 'self') suits the Vite build.
   app.use(helmet());
   app.use(cors({ origin: config.clientOrigin, credentials: true }));
@@ -50,11 +53,11 @@ export function createApp({ db, config, clientDist = CLIENT_DIST }) {
   app.use('/api', (req, res) => res.status(404).json({ error: 'Not found' }));
 
   if (config.isProduction && fs.existsSync(clientDist)) {
-    const indexHtml = path.join(clientDist, 'index.html');
     app.use(express.static(clientDist, { index: false }));
     app.use((req, res, next) => {
       if (req.method !== 'GET' && req.method !== 'HEAD') return next();
-      res.sendFile(indexHtml);
+      // `root` keeps send's dotfile check off the install path (e.g. ~/.apps/huddle).
+      res.sendFile('index.html', { root: clientDist });
     });
   }
 

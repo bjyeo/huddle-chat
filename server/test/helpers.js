@@ -16,6 +16,7 @@ export function testConfig(overrides = {}) {
     maxUsers: 10,
     inviteCode: null,
     clientOrigin: 'http://localhost:5173',
+    trustProxy: 0,
     ...overrides,
   };
 }

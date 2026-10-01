@@ -55,7 +55,8 @@ describe('app', () => {
 describe('production static serving', () => {
   let dir, db, close, app;
   before(() => {
-    dir = fs.mkdtempSync(path.join(os.tmpdir(), 'huddle-dist-'));
+    // A dot-directory in the path (e.g. ~/.apps/huddle) must not break serving.
+    dir = fs.mkdtempSync(path.join(os.tmpdir(), '.huddle-dist-'));
     fs.writeFileSync(path.join(dir, 'index.html'), '<!doctype html><div id="root"></div>');
     fs.writeFileSync(path.join(dir, 'app.js'), 'console.log(1)');
     db = openDatabase(':memory:');

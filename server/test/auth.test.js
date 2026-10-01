@@ -193,6 +193,44 @@ describe('login rate limiting', () => {
       await server.stop();
     }
   });
+
+  const failLogins = (server, forwardedFor, times) =>
+    Array.from({ length: times }).reduce(
+      (prev) =>
+        prev.then(() =>
+          server
+            .request()
+            .post('/api/auth/login')
+            .set('X-Forwarded-For', forwardedFor)
+            .send({ username: 'nobody', password: 'nope-nope' }),
+        ),
+      Promise.resolve(),
+    );
+
+  it('limits per client IP behind a trusted proxy (TRUST_PROXY)', async () => {
+    const server = await startServer({ trustProxy: 1 });
+    try {
+      await failLogins(server, '203.0.113.1', 10);
+      const blocked = await failLogins(server, '203.0.113.1', 1);
+      assert.equal(blocked.status, 429);
+      const other = await failLogins(server, '203.0.113.2', 1);
+      assert.equal(other.status, 401);
+    } finally {
+      await server.stop();
+    }
+  });
+
+  it('ignores X-Forwarded-For when no proxy is trusted', async () => {
+    const server = await startServer();
+    try {
+      await failLogins(server, '203.0.113.1', 10);
+      // A spoofed header must not reset the limit.
+      const spoofed = await failLogins(server, '203.0.113.99', 1);
+      assert.equal(spoofed.status, 429);
+    } finally {
+      await server.stop();
+    }
+  });
 });
 
 describe('requireAuth', () => {

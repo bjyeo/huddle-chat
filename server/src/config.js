@@ -46,5 +46,7 @@ export function loadConfig(env = process.env) {
     maxUsers: parseInteger(env, 'MAX_USERS', 10, 1),
     inviteCode: env.INVITE_CODE || null,
     clientOrigin: env.CLIENT_ORIGIN || 'http://localhost:5173',
+    // Number of reverse proxies in front of the app; 0 ignores X-Forwarded-For entirely.
+    trustProxy: parseInteger(env, 'TRUST_PROXY', 0, 0),
   };
 }

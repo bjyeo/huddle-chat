@@ -117,14 +117,15 @@ Messages are sent via REST (`POST /api/channels/:id/messages`), not via the sock
 
 ## Environment
 
-| Var             | Default                                    | Notes                                   |
-| --------------- | ------------------------------------------ | --------------------------------------- |
-| `PORT`          | `3001`                                     | API + socket server                     |
-| `JWT_SECRET`    | random per boot in dev                     | **required** when `NODE_ENV=production` |
-| `DATABASE_PATH` | `./data/huddle.db` (relative to `server/`) | `:memory:` in tests                     |
-| `MAX_USERS`     | `10`                                       |                                         |
-| `INVITE_CODE`   | unset                                      | when set, registration requires it      |
-| `CLIENT_ORIGIN` | `http://localhost:5173`                    | CORS origin for dev                     |
+| Var             | Default                                    | Notes                                                                                               |
+| --------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `PORT`          | `3001`                                     | API + socket server                                                                                 |
+| `JWT_SECRET`    | random per boot in dev                     | **required** when `NODE_ENV=production`                                                             |
+| `DATABASE_PATH` | `./data/huddle.db` (relative to `server/`) | `:memory:` in tests                                                                                 |
+| `MAX_USERS`     | `10`                                       |                                                                                                     |
+| `INVITE_CODE`   | unset                                      | when set, registration requires it                                                                  |
+| `CLIENT_ORIGIN` | `http://localhost:5173`                    | CORS origin for dev; also the allowed websocket `Origin` (set it to your public URL behind a proxy) |
+| `TRUST_PROXY`   | `0`                                        | number of reverse proxies in front; makes login rate limiting use the real client IP                |
 
 In development the Vite dev server (port 5173) proxies `/api` and `/socket.io` (with `ws: true`) to port 3001, so the app is same-origin.
 In production `server` also serves the built client from `client/dist` with an SPA fallback.
