@@ -30,10 +30,12 @@ export function createApp({ db, config, clientDist = CLIENT_DIST }) {
     config,
     broadcast: realtime.broadcast,
     isOnline: realtime.isOnline,
+    endSession: realtime.endSession,
     loginLimiter: createLoginLimiter(),
+    inviteLimiter: createLoginLimiter(),
   };
 
-  // Makes req.ip (used by the login limiter) the real client IP behind N trusted proxies.
+  // Makes req.ip (used by the rate limiters) the real client IP behind N trusted proxies.
   if (config.trustProxy) app.set('trust proxy', config.trustProxy);
 
   // Helmet's default CSP (script-src 'self', connect-src via default-src 'self') suits the Vite build.

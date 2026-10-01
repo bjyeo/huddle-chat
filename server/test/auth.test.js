@@ -101,6 +101,23 @@ describe('registration limits', () => {
       await server.stop();
     }
   });
+
+  it('rate limits invite code guessing with 429 after 10 wrong codes', async () => {
+    const server = await startServer({ inviteCode: 'let-me-in' });
+    const attempt = (inviteCode) =>
+      server
+        .request()
+        .post('/api/auth/register')
+        .send({ username: 'eve', password: PASSWORD, inviteCode });
+    try {
+      for (let i = 0; i < 10; i++) assert.equal((await attempt(`guess-${i}`)).status, 403);
+      const blocked = await attempt('let-me-in');
+      assert.equal(blocked.status, 429);
+      assert.ok(Number(blocked.headers['retry-after']) > 0);
+    } finally {
+      await server.stop();
+    }
+  });
 });
 
 describe('login, logout and /me', () => {

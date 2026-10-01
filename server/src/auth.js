@@ -13,8 +13,13 @@ export const hashPassword = (password) => bcrypt.hash(password, BCRYPT_COST);
 
 export const verifyPassword = (password, hash) => bcrypt.compare(password, hash ?? DUMMY_HASH);
 
+// jwtid makes every login a distinct session, even two within the same second.
 export const signToken = (userId, secret) =>
-  jwt.sign({ sub: userId }, secret, { algorithm: 'HS256', expiresIn: '7d' });
+  jwt.sign({ sub: userId }, secret, {
+    algorithm: 'HS256',
+    expiresIn: '7d',
+    jwtid: crypto.randomUUID(),
+  });
 
 /** Returns the user a token belongs to, or null for invalid/expired tokens and deleted users. */
 export function authenticateToken(token, { store, secret }) {

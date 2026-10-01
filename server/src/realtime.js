@@ -1,9 +1,11 @@
 import { parseCookie } from 'cookie';
+import jwt from 'jsonwebtoken';
 import { Server } from 'socket.io';
 import { COOKIE_NAME, authenticateToken } from './auth.js';
 
 const MEMBERS_ROOM = 'members';
 const TYPING_THROTTLE_MS = 1000;
+const MAX_TIMEOUT_MS = 2 ** 31 - 1; // setTimeout's ceiling (~24.8 days)
 
 const userRoom = (userId) => `user:${userId}`;
 
@@ -32,12 +34,20 @@ export function createRealtime(httpServer, { store, config }) {
     const user = authenticateToken(token, { store, secret: config.jwtSecret });
     if (!user) return next(new Error('Not authenticated'));
     socket.data.user = user;
+    socket.data.token = token;
+    socket.data.expiresAt = jwt.decode(token).exp * 1000;
     next();
   });
 
   io.on('connection', (socket) => {
     const { user } = socket.data;
     socket.join([MEMBERS_ROOM, userRoom(user.id)]);
+
+    // The handshake is the only auth check, so drop the socket when its session expires.
+    const expiry = setTimeout(
+      () => socket.disconnect(true),
+      Math.min(Math.max(socket.data.expiresAt - Date.now(), 0), MAX_TIMEOUT_MS),
+    );
 
     const count = (connections.get(user.id) ?? 0) + 1;
     connections.set(user.id, count);
@@ -58,6 +68,7 @@ export function createRealtime(httpServer, { store, config }) {
     });
 
     socket.on('disconnect', () => {
+      clearTimeout(expiry);
       const remaining = (connections.get(user.id) ?? 1) - 1;
       if (remaining > 0) return connections.set(user.id, remaining);
       connections.delete(user.id);
@@ -69,5 +80,11 @@ export function createRealtime(httpServer, { store, config }) {
     io,
     isOnline: (userId) => connections.has(userId),
     broadcast: (event, payload) => io.to(MEMBERS_ROOM).emit(event, payload),
+    /** Disconnects the sockets opened with this session token (other devices stay connected). */
+    async endSession(userId, token) {
+      for (const socket of await io.in(userRoom(userId)).fetchSockets()) {
+        if (socket.data.token === token) socket.disconnect(true);
+      }
+    },
   };
 }

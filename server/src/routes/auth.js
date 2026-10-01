@@ -1,5 +1,7 @@
 import { Router } from 'express';
 import {
+  COOKIE_NAME,
+  authenticateToken,
   clearSessionCookie,
   hashPassword,
   requireAuth,
@@ -10,11 +12,22 @@ import {
 import { isUniqueViolation } from '../store.js';
 import { validateDisplayName, validatePassword, validateUsername } from '../validation.js';
 
-export function authRouter({ store, config, loginLimiter, broadcast }) {
+export function authRouter({ store, config, loginLimiter, inviteLimiter, broadcast, endSession }) {
   const router = Router();
   const fullError = `This server is full (max ${config.maxUsers} members)`;
 
+  const tooMany = (res, retryAfter, error) => {
+    res.set('Retry-After', String(retryAfter));
+    res.status(429).json({ error });
+  };
+
   router.post('/register', async (req, res) => {
+    // Invite codes are the only gate on joining, so guessing them is rate limited like logins.
+    const inviteRetryAfter = config.inviteCode ? inviteLimiter.retryAfter(req.ip) : 0;
+    if (inviteRetryAfter > 0) {
+      return tooMany(res, inviteRetryAfter, 'Too many invalid invite codes, try again later');
+    }
+
     const { username, password, displayName, inviteCode } = req.body ?? {};
 
     const name = validateUsername(username);
@@ -25,6 +38,7 @@ export function authRouter({ store, config, loginLimiter, broadcast }) {
     if (display.error) return res.status(400).json({ error: display.error });
 
     if (config.inviteCode && !safeEqual(inviteCode, config.inviteCode)) {
+      inviteLimiter.recordFailure(req.ip);
       return res.status(403).json({ error: 'Invalid invite code' });
     }
     if (store.countUsers() >= config.maxUsers) return res.status(403).json({ error: fullError });
@@ -54,8 +68,7 @@ export function authRouter({ store, config, loginLimiter, broadcast }) {
   router.post('/login', async (req, res) => {
     const retryAfter = loginLimiter.retryAfter(req.ip);
     if (retryAfter > 0) {
-      res.set('Retry-After', String(retryAfter));
-      return res.status(429).json({ error: 'Too many failed login attempts, try again later' });
+      return tooMany(res, retryAfter, 'Too many failed login attempts, try again later');
     }
 
     const { username, password } = req.body ?? {};
@@ -75,7 +88,11 @@ export function authRouter({ store, config, loginLimiter, broadcast }) {
     res.json({ user });
   });
 
-  router.post('/logout', (req, res) => {
+  router.post('/logout', async (req, res) => {
+    const token = req.cookies?.[COOKIE_NAME];
+    const user = authenticateToken(token, { store, secret: config.jwtSecret });
+    // The socket was authenticated once at handshake; close it so it stops receiving events.
+    if (user) await endSession(user.id, token);
     clearSessionCookie(res, config);
     res.status(204).end();
   });

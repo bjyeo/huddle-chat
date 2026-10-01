@@ -1,16 +1,30 @@
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, it } from 'node:test';
+import jwt from 'jsonwebtoken';
+import request from 'supertest';
 import {
+  PASSWORD,
   collectEvents,
   connectSocket,
   generalChannel,
   registerUser,
+  sessionCookie,
   startServer,
   waitForEvent,
 } from './helpers.js';
 
 describe('realtime', () => {
   let server, alice, bob, general;
+
+  /** Logs an existing user in again, creating a separate session. */
+  const loginAgain = async (who) => {
+    const agent = request.agent(server.url);
+    const res = await agent
+      .post('/api/auth/login')
+      .send({ username: who.user.username, password: PASSWORD });
+    assert.equal(res.status, 200);
+    return { agent, cookie: sessionCookie(res) };
+  };
   const sockets = [];
   const connect = async (who, options = { cookie: who.cookie }) => {
     const socket = await connectSocket(server, options);
@@ -151,6 +165,40 @@ describe('realtime', () => {
     });
     assert.deepEqual(await seenByAlice, []);
     assert.deepEqual(await seenByAliceTab2, []);
+  });
+
+  it('logout disconnects that session’s sockets but not other devices', async () => {
+    const watcher = await connect(alice);
+    const isBob = (online) => (p) => p.userId === bob.user.id && p.online === online;
+
+    // A second login is a separate session (another device).
+    const phone = await loginAgain(bob);
+    const laptopSocket = await connect(bob);
+    const phoneSocket = await connect(bob, { cookie: phone.cookie });
+
+    const kicked = new Promise((resolve) => laptopSocket.once('disconnect', resolve));
+    const extra = collectEvents(watcher, 'presence:update', 300);
+    assert.equal((await bob.agent.post('/api/auth/logout')).status, 204);
+    assert.equal(await kicked, 'io server disconnect');
+    assert.ok(phoneSocket.connected);
+    assert.deepEqual(await extra, []);
+
+    const offline = waitForEvent(watcher, 'presence:update', isBob(false));
+    await phone.agent.post('/api/auth/logout');
+    await offline;
+    assert.equal(phoneSocket.connected, false);
+    // Log bob back in for the following tests.
+    bob = { ...bob, ...(await loginAgain(bob)) };
+  });
+
+  it('disconnects a socket when its session token expires', async () => {
+    const token = jwt.sign(
+      { sub: alice.user.id, exp: Math.floor(Date.now() / 1000) + 1 },
+      server.config.jwtSecret,
+    );
+    const socket = await connect(alice, { auth: { token } });
+    const reason = await new Promise((resolve) => socket.once('disconnect', resolve));
+    assert.equal(reason, 'io server disconnect');
   });
 
   it('ignores typing for unknown channels or bad payloads', async () => {

@@ -61,11 +61,13 @@ This is the single source of truth shared by `server/` and `client/`. Both sides
   - `400` validation error, `409` username taken,
     `403 { error: "Invalid invite code" }` when env `INVITE_CODE` is set and doesn't match,
     `403 { error: "This server is full (max 10 members)" }` when the user cap is reached.
+  - When `INVITE_CODE` is set: max 10 wrong invite codes per IP per 15 minutes → `429` with `Retry-After`.
   - Broadcasts socket `user:joined { user }`.
 - `POST /api/auth/login` body `{ username, password }` (username match is case-insensitive)
   - `200 { user }` and sets the cookie. `401 { error: "Invalid username or password" }`.
   - Rate limited: max 10 failed attempts per IP per 15 minutes → `429`.
-- `POST /api/auth/logout` → `204`, clears the cookie.
+- `POST /api/auth/logout` → `204`, clears the cookie and disconnects the sockets opened with that session
+  (other sessions of the same user stay connected).
 - `GET /api/auth/me` → `200 { user }` or `401`.
 
 ### Users
@@ -92,6 +94,8 @@ This is the single source of truth shared by `server/` and `client/`. Both sides
 
 - Same origin, default path `/socket.io`. The server authenticates the handshake from the `token` cookie
   (falls back to `socket.handshake.auth.token`); unauthenticated connections are rejected with `Error("Not authenticated")`.
+  The server disconnects a socket (`io server disconnect`) when its session is logged out or its token expires;
+  clients should treat that, and a later `Not authenticated` connect error, as being logged out.
 - Every authenticated socket joins one room (`"members"`); with ≤10 users every event goes to everyone and the client filters by channel.
 
 Server → client events:
