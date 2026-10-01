@@ -8,7 +8,9 @@ This is the single source of truth shared by `server/` and `client/`. Both sides
 - Errors always look like `{ "error": "Human readable message" }` with an appropriate status code.
 - Timestamps are ISO-8601 strings (`2026-10-01T12:00:00.000Z`).
 - IDs are integers.
-- Authentication uses a JWT stored in an **httpOnly cookie named `token`** (`SameSite=Lax`, `Secure` in production, 7 day expiry, payload `{ sub: userId }`).
+- Authentication uses a JWT stored in an **httpOnly cookie named `token`** (`SameSite=Lax`, `Secure` in production, 7 day expiry, payload `{ sub: userId, jti }`).
+  Tokens are stateless: logout clears the cookie and closes that session's sockets, but a token copied
+  before logout stays valid until it expires. Rotate `JWT_SECRET` to invalidate every session at once.
   The client never touches the token directly; it sends requests with `credentials: 'include'`.
 - Every endpoint except `register`, `login`, `logout` and `GET /api/health` requires auth → `401 { error: "Not authenticated" }` otherwise.
 
@@ -61,11 +63,13 @@ This is the single source of truth shared by `server/` and `client/`. Both sides
   - `400` validation error, `409` username taken,
     `403 { error: "Invalid invite code" }` when env `INVITE_CODE` is set and doesn't match,
     `403 { error: "This server is full (max 10 members)" }` when the user cap is reached.
+  - When `INVITE_CODE` is set: max 10 wrong invite codes per IP per 15 minutes → `429` with `Retry-After`.
   - Broadcasts socket `user:joined { user }`.
 - `POST /api/auth/login` body `{ username, password }` (username match is case-insensitive)
   - `200 { user }` and sets the cookie. `401 { error: "Invalid username or password" }`.
   - Rate limited: max 10 failed attempts per IP per 15 minutes → `429`.
-- `POST /api/auth/logout` → `204`, clears the cookie.
+- `POST /api/auth/logout` → `204`, clears the cookie and disconnects the sockets opened with that session
+  (other sessions of the same user stay connected).
 - `GET /api/auth/me` → `200 { user }` or `401`.
 
 ### Users
@@ -92,6 +96,8 @@ This is the single source of truth shared by `server/` and `client/`. Both sides
 
 - Same origin, default path `/socket.io`. The server authenticates the handshake from the `token` cookie
   (falls back to `socket.handshake.auth.token`); unauthenticated connections are rejected with `Error("Not authenticated")`.
+  The server disconnects a socket (`io server disconnect`) when its session is logged out or its token expires;
+  clients should treat that, and a later `Not authenticated` connect error, as being logged out.
 - Every authenticated socket joins one room (`"members"`); with ≤10 users every event goes to everyone and the client filters by channel.
 
 Server → client events:
@@ -117,14 +123,15 @@ Messages are sent via REST (`POST /api/channels/:id/messages`), not via the sock
 
 ## Environment
 
-| Var             | Default                                    | Notes                                   |
-| --------------- | ------------------------------------------ | --------------------------------------- |
-| `PORT`          | `3001`                                     | API + socket server                     |
-| `JWT_SECRET`    | random per boot in dev                     | **required** when `NODE_ENV=production` |
-| `DATABASE_PATH` | `./data/huddle.db` (relative to `server/`) | `:memory:` in tests                     |
-| `MAX_USERS`     | `10`                                       |                                         |
-| `INVITE_CODE`   | unset                                      | when set, registration requires it      |
-| `CLIENT_ORIGIN` | `http://localhost:5173`                    | CORS origin for dev                     |
+| Var             | Default                                    | Notes                                                                                               |
+| --------------- | ------------------------------------------ | --------------------------------------------------------------------------------------------------- |
+| `PORT`          | `3001`                                     | API + socket server                                                                                 |
+| `JWT_SECRET`    | random per boot in dev                     | **required** when `NODE_ENV=production`                                                             |
+| `DATABASE_PATH` | `./data/huddle.db` (relative to `server/`) | `:memory:` in tests                                                                                 |
+| `MAX_USERS`     | `10`                                       |                                                                                                     |
+| `INVITE_CODE`   | unset                                      | when set, registration requires it                                                                  |
+| `CLIENT_ORIGIN` | `http://localhost:5173`                    | CORS origin for dev; also the allowed websocket `Origin` (set it to your public URL behind a proxy) |
+| `TRUST_PROXY`   | `0`                                        | number of reverse proxies in front; makes login rate limiting use the real client IP                |
 
 In development the Vite dev server (port 5173) proxies `/api` and `/socket.io` (with `ws: true`) to port 3001, so the app is same-origin.
 In production `server` also serves the built client from `client/dist` with an SPA fallback.

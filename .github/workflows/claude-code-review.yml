@@ -13,38 +13,36 @@ jobs:
       pull-requests: write
       issues: read
       id-token: write
-    env:
-      HAS_CLAUDE_SECRET: ${{ secrets.ANTHROPIC_API_KEY != '' || secrets.CLAUDE_CODE_OAUTH_TOKEN != '' }}
+
     steps:
-      - name: Explain skip
-        if: env.HAS_CLAUDE_SECRET != 'true'
-        run: echo "::warning::Claude review skipped - add ANTHROPIC_API_KEY or CLAUDE_CODE_OAUTH_TOKEN as a repository secret."
-      - uses: actions/checkout@v4
-        if: env.HAS_CLAUDE_SECRET == 'true'
+      - name: Checkout repository
+        uses: actions/checkout@v4
         with:
           fetch-depth: 1
-      - uses: anthropics/claude-code-action@v1
-        if: env.HAS_CLAUDE_SECRET == 'true'
+
+      - name: Run Claude Code Review
+        id: claude-review
+        uses: anthropics/claude-code-action@v1
         with:
-          anthropic_api_key: ${{ secrets.ANTHROPIC_API_KEY }}
           claude_code_oauth_token: ${{ secrets.CLAUDE_CODE_OAUTH_TOKEN }}
-          track_progress: true
           prompt: |
             REPO: ${{ github.repository }}
             PR NUMBER: ${{ github.event.pull_request.number }}
 
-            Review this pull request for Huddle, a small Discord-style chat app
-            (Express + Socket.IO + SQLite backend in server/, React + Vite frontend in client/).
-            Read CLAUDE.md and docs/API.md first; the API contract is the source of truth.
+            Review this pull request for Huddle, a small Discord-style chat app for up to 10 people
+            (Express + Socket.IO + node:sqlite backend in server/, React + Vite frontend in client/).
+            Read CLAUDE.md and docs/API.md first; docs/API.md is the binding contract.
+            Use `gh pr diff` to see the changes and read surrounding files as needed.
 
             Focus on, in priority order:
-            1. Security: auth/session handling, authorization checks (author-only edits/deletes,
-               channel ownership), SQL injection, XSS, secrets, rate limiting.
+            1. Security: auth/session handling, authorization (author-only edits/deletes, channel
+               ownership), SQL injection, XSS, secrets, rate limiting, websocket origin checks.
             2. Correctness bugs and contract drift between server, client and docs/API.md.
-            3. Realtime edge cases (socket auth, presence, duplicate or missed events).
+            3. Realtime edge cases (socket auth, presence, duplicate or missed events, reconnects).
             4. Missing or weak tests for the changed behaviour.
 
-            Use inline comments for specific lines and a single top-level summary comment.
-            Be concise; skip style nits that Prettier would handle.
+            Post an inline comment (mcp__github_inline_comment__create_inline_comment) for each
+            concrete issue, then exactly one top-level summary with `gh pr comment`. If you find
+            nothing significant, say so briefly in the summary. Skip style nits Prettier handles.
           claude_args: |
-            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*)"
+            --allowedTools "mcp__github_inline_comment__create_inline_comment,Bash(gh pr comment:*),Bash(gh pr diff:*),Bash(gh pr view:*),Read,Glob,Grep"
