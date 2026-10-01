@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { DEFAULT_MAX_USERS } from '@huddle/shared';
 import { io as ioClient } from 'socket.io-client';
 import request from 'supertest';
 import { createApp } from '../src/app.js';
@@ -15,7 +16,7 @@ export function testConfig(overrides = {}) {
     port: 0,
     jwtSecret: 'test-secret',
     databasePath: ':memory:',
-    maxUsers: 10,
+    maxUsers: DEFAULT_MAX_USERS,
     inviteCode: null,
     allowOpenRegistration: true,
     clientOrigin: 'http://localhost:5173',

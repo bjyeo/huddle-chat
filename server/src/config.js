@@ -1,4 +1,5 @@
 import crypto from 'node:crypto';
+import { DEFAULT_MAX_USERS } from '@huddle/shared';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
@@ -95,7 +96,7 @@ export function loadConfig(env = process.env) {
     port: parseInteger(env, 'PORT', 3001, 0),
     jwtSecret,
     databasePath: resolveDatabasePath(env),
-    maxUsers: parseInteger(env, 'MAX_USERS', 10, 1),
+    maxUsers: parseInteger(env, 'MAX_USERS', DEFAULT_MAX_USERS, 1),
     inviteCode,
     allowOpenRegistration,
     clientOrigin: env.CLIENT_ORIGIN || 'http://localhost:5173',

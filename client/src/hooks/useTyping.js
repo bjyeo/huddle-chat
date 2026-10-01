@@ -5,9 +5,13 @@ import { useSocket, useSocketEvent } from './useSocket.jsx';
 // Several throttle windows, so one dropped or late event doesn't make the indicator flicker.
 export const TYPING_TTL_MS = 4 * TYPING_THROTTLE_MS;
 
+// A margin over the server's window: both sides use their own clock, and network jitter could
+// otherwise land two events just inside it and get the second one dropped.
+export const TYPING_SEND_INTERVAL_MS = TYPING_THROTTLE_MS + 250;
+
 /**
  * Who else is typing in `channelId`, plus `notifyTyping()` for our own input, throttled to the
- * server's relay rate (TYPING_THROTTLE_MS) so no event we send is dropped.
+ * slightly below the server's relay rate (see TYPING_SEND_INTERVAL_MS).
  */
 export function useTyping(channelId) {
   const { socket } = useSocket();
@@ -50,7 +54,7 @@ export function useTyping(channelId) {
 
   const notifyTyping = useCallback(() => {
     const now = Date.now();
-    if (!socket || channelId == null || now - lastSent.current < TYPING_THROTTLE_MS) return;
+    if (!socket || channelId == null || now - lastSent.current < TYPING_SEND_INTERVAL_MS) return;
     lastSent.current = now;
     socket.emit('typing', { channelId });
   }, [socket, channelId]);

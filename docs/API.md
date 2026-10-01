@@ -141,7 +141,8 @@ Client → server events:
 
 **Typing throttle:** the server relays at most one `typing` event per socket per channel every
 `TYPING_THROTTLE_MS` (1000 ms, exported by `@huddle/shared`) and silently drops the rest — no ack, no error.
-The client emits at most once per `TYPING_THROTTLE_MS` while the user types, and shows a typer for a few
+The client emits at most once per `TYPING_THROTTLE_MS + 250 ms` while the user types (a margin for clock and
+network jitter), and shows a typer for a few
 throttle windows (4 s) after their last event, so an occasional dropped or late event doesn't flicker.
 
 Messages are sent via REST (`POST /api/channels/:id/messages`), not via the socket.

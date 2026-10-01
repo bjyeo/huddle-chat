@@ -4,7 +4,7 @@ import { io } from 'socket.io-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakeSocket } from '../test/fakes.js';
 import { SocketProvider } from './useSocket.jsx';
-import { TYPING_TTL_MS, useTyping } from './useTyping.js';
+import { TYPING_SEND_INTERVAL_MS, TYPING_TTL_MS, useTyping } from './useTyping.js';
 
 vi.mock('socket.io-client', () => ({ io: vi.fn() }));
 
@@ -56,7 +56,8 @@ describe('useTyping', () => {
     expect(result.current.typers).toEqual([]);
   });
 
-  it('throttles outgoing typing events to the shared TYPING_THROTTLE_MS', () => {
+  it('sends typing events no faster than the server relays them', () => {
+    expect(TYPING_SEND_INTERVAL_MS).toBeGreaterThan(TYPING_THROTTLE_MS);
     vi.setSystemTime(new Date('2026-10-01T12:00:00Z'));
     const { result } = renderTyping();
 
@@ -67,7 +68,7 @@ describe('useTyping', () => {
     expect(socket.emit).toHaveBeenCalledTimes(1);
     expect(socket.emit).toHaveBeenCalledWith('typing', { channelId: 1 });
 
-    act(() => vi.advanceTimersByTime(TYPING_THROTTLE_MS - 1));
+    act(() => vi.advanceTimersByTime(TYPING_SEND_INTERVAL_MS - 1));
     act(() => result.current.notifyTyping());
     expect(socket.emit).toHaveBeenCalledTimes(1);
 
