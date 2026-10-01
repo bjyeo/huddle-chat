@@ -1,4 +1,5 @@
 import { act, renderHook } from '@testing-library/react';
+import { TYPING_THROTTLE_MS } from '@huddle/shared';
 import { io } from 'socket.io-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createFakeSocket } from '../test/fakes.js';
@@ -55,7 +56,7 @@ describe('useTyping', () => {
     expect(result.current.typers).toEqual([]);
   });
 
-  it('throttles outgoing typing events to one per 2 seconds', () => {
+  it('throttles outgoing typing events to the shared TYPING_THROTTLE_MS', () => {
     vi.setSystemTime(new Date('2026-10-01T12:00:00Z'));
     const { result } = renderTyping();
 
@@ -66,8 +67,16 @@ describe('useTyping', () => {
     expect(socket.emit).toHaveBeenCalledTimes(1);
     expect(socket.emit).toHaveBeenCalledWith('typing', { channelId: 1 });
 
-    act(() => vi.advanceTimersByTime(2000));
+    act(() => vi.advanceTimersByTime(TYPING_THROTTLE_MS - 1));
+    act(() => result.current.notifyTyping());
+    expect(socket.emit).toHaveBeenCalledTimes(1);
+
+    act(() => vi.advanceTimersByTime(1));
     act(() => result.current.notifyTyping());
     expect(socket.emit).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps typers visible across several throttle windows', () => {
+    expect(TYPING_TTL_MS).toBeGreaterThanOrEqual(2 * TYPING_THROTTLE_MS);
   });
 });

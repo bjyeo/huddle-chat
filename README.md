@@ -24,7 +24,7 @@ A small, self-hosted, Discord-style group chat for up to **10 people**: text cha
 Requires **Node.js 22.13+** (for `node:sqlite`).
 
 ```bash
-npm install          # installs both workspaces and enables the git pre-commit hook
+npm install          # installs all workspaces and enables the git pre-commit hook
 npm run dev          # API on http://localhost:3001, app on http://localhost:5173
 ```
 
@@ -54,6 +54,7 @@ See [`.env.example`](.env.example) and the table in [`docs/API.md`](docs/API.md#
 ```
 client/            React app (hooks in client/src/hooks)
 server/            Express + Socket.IO + SQLite API
+shared/            @huddle/shared: validation rules and limits imported by both sides
 docs/API.md        REST + realtime contract shared by both sides
 .claude/           Claude Code project settings and hooks
 .githooks/         git pre-commit hook (Prettier check)
@@ -63,7 +64,7 @@ docs/API.md        REST + realtime contract shared by both sides
 ## Tests
 
 ```bash
-npm test             # server (node:test) then client (Vitest)
+npm test             # shared + server (node:test), then client (Vitest)
 npm run format:check
 ```
 

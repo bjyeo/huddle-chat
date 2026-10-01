@@ -45,6 +45,9 @@ export function createApp({ db, config, clientDist = CLIENT_DIST }) {
   app.use(cookieParser());
 
   app.get('/api/health', (req, res) => res.json({ ok: true }));
+  app.get('/api/meta', (req, res) =>
+    res.json({ maxUsers: config.maxUsers, inviteRequired: Boolean(config.inviteCode) }),
+  );
   app.use('/api/auth', authRouter(deps));
 
   const authed = requireAuth(deps);

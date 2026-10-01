@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import { after, afterEach, before, describe, it } from 'node:test';
+import { TYPING_THROTTLE_MS } from '@huddle/shared';
 import jwt from 'jsonwebtoken';
 import request from 'supertest';
 import {
@@ -215,5 +216,27 @@ describe('realtime', () => {
     aliceSocket.emit('typing', { channelId: 'general' });
     aliceSocket.emit('typing', null);
     assert.deepEqual(await seen, []);
+  });
+
+  it('drops typing events faster than TYPING_THROTTLE_MS per channel, relays later ones', async () => {
+    const other = (await alice.agent.post('/api/channels').send({ name: 'throttle' })).body.channel;
+    const aliceSocket = await connect(alice);
+    const bobSocket = await connect(bob);
+    const typingIn = (channelId) => aliceSocket.emit('typing', { channelId });
+
+    const burst = collectEvents(bobSocket, 'typing', 300);
+    typingIn(general.id);
+    typingIn(general.id);
+    typingIn(general.id);
+    typingIn(other.id); // the throttle is per channel
+    const relayed = (await burst).map((event) => event.channelId);
+    assert.deepEqual(relayed.sort(), [general.id, other.id].sort());
+
+    // 300ms have passed; once the window since the first relayed event is over, the next one
+    // goes through.
+    await new Promise((resolve) => setTimeout(resolve, TYPING_THROTTLE_MS - 300 + 100));
+    const later = waitForEvent(bobSocket, 'typing', (event) => event.channelId === general.id);
+    typingIn(general.id);
+    await later;
   });
 });

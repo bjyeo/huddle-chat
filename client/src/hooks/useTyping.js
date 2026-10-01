@@ -1,10 +1,14 @@
+import { TYPING_THROTTLE_MS } from '@huddle/shared';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { useSocket, useSocketEvent } from './useSocket.jsx';
 
-export const TYPING_THROTTLE_MS = 2000;
-export const TYPING_TTL_MS = 4000;
+// Several throttle windows, so one dropped or late event doesn't make the indicator flicker.
+export const TYPING_TTL_MS = 4 * TYPING_THROTTLE_MS;
 
-/** Who else is typing in `channelId`, plus a throttled `notifyTyping()` for our own input. */
+/**
+ * Who else is typing in `channelId`, plus `notifyTyping()` for our own input, throttled to the
+ * server's relay rate (TYPING_THROTTLE_MS) so no event we send is dropped.
+ */
 export function useTyping(channelId) {
   const { socket } = useSocket();
   const [typers, setTypers] = useState([]);

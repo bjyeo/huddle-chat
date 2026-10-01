@@ -4,6 +4,7 @@ import { io } from 'socket.io-client';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { App } from '../App.jsx';
 import { AuthProvider } from '../hooks/useAuth.jsx';
+import { resetServerMeta } from '../hooks/useServerMeta.js';
 import { createFakeSocket, mockFetch } from '../test/fakes.js';
 
 vi.mock('socket.io-client', () => ({ io: vi.fn() }));
@@ -21,6 +22,7 @@ function renderApp() {
 
 describe('auth flow', () => {
   beforeEach(() => {
+    resetServerMeta();
     io.mockImplementation(() => createFakeSocket());
   });
 
@@ -76,6 +78,54 @@ describe('auth flow', () => {
     await user.click(screen.getByRole('button', { name: 'Create account' }));
 
     expect(screen.getByRole('alert')).toHaveTextContent(/3–20 characters/);
-    expect(fetchMock).toHaveBeenCalledTimes(1); // only the initial /me
+    const urls = fetchMock.mock.calls.map(([url]) => url);
+    expect(urls).not.toContain('/api/auth/register');
+  });
+});
+
+describe('registration uses the server settings from /api/meta', () => {
+  beforeEach(() => resetServerMeta());
+
+  const openRegister = async (meta) => {
+    const user = userEvent.setup();
+    const fetchMock = mockFetch({
+      'GET /api/auth/me': [401, { error: 'Not authenticated' }],
+      'GET /api/meta': meta,
+      'POST /api/auth/register': [403, { error: 'Invalid invite code' }],
+    });
+    renderApp();
+    await user.click(await screen.findByRole('button', { name: 'Register' }));
+    return { user, fetchMock };
+  };
+
+  it('shows the runtime member cap and hides the invite code when none is required', async () => {
+    await openRegister([200, { maxUsers: 25, inviteRequired: false }]);
+    expect(await screen.findByText('Join your Huddle — up to 25 members.')).toBeInTheDocument();
+    expect(screen.queryByLabelText(/Invite code/)).not.toBeInTheDocument();
+  });
+
+  it('requires the invite code when the server does', async () => {
+    const { user, fetchMock } = await openRegister([200, { maxUsers: 5, inviteRequired: true }]);
+    expect(await screen.findByText('Join your Huddle — up to 5 members.')).toBeInTheDocument();
+    const invite = screen.getByLabelText('Invite code');
+    expect(invite).toBeRequired();
+
+    await user.type(screen.getByLabelText('Username'), 'carol');
+    await user.type(screen.getByLabelText('Password'), 'longenough');
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+    expect(screen.getByRole('alert')).toHaveTextContent('Enter your invite code.');
+
+    await user.type(invite, 'wrong');
+    await user.click(screen.getByRole('button', { name: 'Create account' }));
+    expect(await screen.findByRole('alert')).toHaveTextContent('Invalid invite code');
+    const [, init] = fetchMock.mock.calls.find(([url]) => url === '/api/auth/register');
+    expect(JSON.parse(init.body)).toMatchObject({ username: 'carol', inviteCode: 'wrong' });
+  });
+
+  it('falls back to no cap and an optional invite code when /api/meta fails', async () => {
+    const { fetchMock } = await openRegister([500, { error: 'Internal server error' }]);
+    await vi.waitFor(() => expect(fetchMock.mock.calls.map(([url]) => url)).toContain('/api/meta'));
+    expect(screen.getByText('Join your Huddle.')).toBeInTheDocument();
+    expect(screen.getByLabelText(/Invite code \(optional\)/)).not.toBeRequired();
   });
 });

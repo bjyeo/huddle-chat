@@ -12,7 +12,7 @@ This is the single source of truth shared by `server/` and `client/`. Both sides
   Tokens are stateless: logout clears the cookie and closes that session's sockets, but a token copied
   before logout stays valid until it expires. Rotate `JWT_SECRET` to invalidate every session at once.
   The client never touches the token directly; it sends requests with `credentials: 'include'`.
-- Every endpoint except `register`, `login`, `logout` and `GET /api/health` requires auth → `401 { error: "Not authenticated" }` otherwise.
+- Every endpoint except `register`, `login`, `logout`, `GET /api/health` and `GET /api/meta` requires auth → `401 { error: "Not authenticated" }` otherwise.
 
 ## Objects
 
@@ -39,6 +39,9 @@ This is the single source of truth shared by `server/` and `client/`. Both sides
 
 ## Limits & validation
 
+These rules are implemented once, in `shared/src/index.js` (package `@huddle/shared`), and imported by both
+the server (authoritative) and the client (instant form feedback). Change them there, and here.
+
 | Field           | Rule                                                                               |
 | --------------- | ---------------------------------------------------------------------------------- |
 | username        | 3–20 chars, `^[a-zA-Z0-9_]+$`, unique case-insensitively, stored as given          |
@@ -55,6 +58,12 @@ This is the single source of truth shared by `server/` and `client/`. Both sides
 ### Health
 
 - `GET /api/health` → `200 { "ok": true }`
+
+### Meta
+
+- `GET /api/meta` → `200 { "maxUsers": 10, "inviteRequired": false }` — public, no auth.
+  `maxUsers` is the configured `MAX_USERS`; `inviteRequired` is `true` when `INVITE_CODE` is set.
+  The client fetches it once per page load (member count, signup screen) and must cope with it failing.
 
 ### Auth
 
@@ -81,7 +90,9 @@ This is the single source of truth shared by `server/` and `client/`. Both sides
 - `GET /api/channels` → `200 { channels: Channel[] }` ordered by `id` ascending.
 - `POST /api/channels` body `{ name, topic? }` → `201 { channel }`; `400` invalid, `409` name exists, `403` channel cap reached.
   Broadcasts `channel:created { channel }`.
-- `DELETE /api/channels/:id` → `204`. Only the creator may delete (`403`). Channel `general` (seeded, `createdBy: null`) can never be deleted (`403`). `404` if missing.
+- `DELETE /api/channels/:id` → `204`. Only the creator may delete (`403`). `404` if missing.
+  **Protected channels:** a channel is protected iff `createdBy === null` (the seeded `#general`); it can never be
+  deleted (`403`). The rule is `isProtectedChannel` in `@huddle/shared` — never check the channel name.
   Deletes its messages too. Broadcasts `channel:deleted { id }`.
 
 ### Messages
@@ -98,7 +109,10 @@ This is the single source of truth shared by `server/` and `client/`. Both sides
   (falls back to `socket.handshake.auth.token`); unauthenticated connections are rejected with `Error("Not authenticated")`.
   The server disconnects a socket (`io server disconnect`) when its session is logged out or its token expires;
   clients should treat that, and a later `Not authenticated` connect error, as being logged out.
-- Every authenticated socket joins one room (`"members"`); with ≤10 users every event goes to everyone and the client filters by channel.
+- Every authenticated socket joins two rooms: `"members"` (every server → client event goes there; with ≤10 users
+  everyone gets everything and the client filters by channel) and `"user:<id>"` (all of that user's sockets/tabs).
+  The per-user room is used to exclude **all** of the sender's own tabs from `typing`, and to find a session's
+  sockets on logout.
 
 Server → client events:
 
@@ -111,13 +125,18 @@ Server → client events:
 | `channel:deleted` | `{ id }`                                                                                      |
 | `user:joined`     | `{ user }`                                                                                    |
 | `presence:update` | `{ userId, online }` — emitted when a user's first socket connects or last socket disconnects |
-| `typing`          | `{ channelId, user: { id, displayName } }` — relayed to everyone **except** the sender        |
+| `typing`          | `{ channelId, user: { id, displayName } }` — relayed to everyone except the sender's sockets  |
 
 Client → server events:
 
-| Event    | Payload                                                          |
-| -------- | ---------------------------------------------------------------- |
-| `typing` | `{ channelId }` (server ignores it if the channel doesn't exist) |
+| Event    | Payload                                                                                |
+| -------- | -------------------------------------------------------------------------------------- |
+| `typing` | `{ channelId }` (server ignores it if the channel doesn't exist; throttled, see below) |
+
+**Typing throttle:** the server relays at most one `typing` event per socket per channel every
+`TYPING_THROTTLE_MS` (1000 ms, exported by `@huddle/shared`) and silently drops the rest — no ack, no error.
+The client emits at most once per `TYPING_THROTTLE_MS` while the user types, and shows a typer for a few
+throttle windows (4 s) after their last event, so an occasional dropped or late event doesn't flicker.
 
 Messages are sent via REST (`POST /api/channels/:id/messages`), not via the socket.
 
