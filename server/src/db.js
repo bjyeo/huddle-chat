@@ -30,6 +30,17 @@ const SCHEMA = `
 
   CREATE INDEX IF NOT EXISTS idx_messages_channel_id ON messages (channel_id, id);
   CREATE INDEX IF NOT EXISTS idx_messages_author_id ON messages (author_id);
+
+  -- One row per login: a token is only accepted while its jti is here and unexpired.
+  CREATE TABLE IF NOT EXISTS sessions (
+    jti        TEXT PRIMARY KEY,
+    user_id    INTEGER NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    created_at TEXT NOT NULL,
+    expires_at TEXT NOT NULL
+  );
+
+  CREATE INDEX IF NOT EXISTS idx_sessions_user_id ON sessions (user_id);
+  CREATE INDEX IF NOT EXISTS idx_sessions_expires_at ON sessions (expires_at);
 `;
 
 export const GENERAL_CHANNEL = { name: 'general', topic: 'Say hi to the group!' };
@@ -40,7 +51,11 @@ export function openDatabase(file) {
 
   const db = new DatabaseSync(file);
   db.exec('PRAGMA foreign_keys = ON');
-  if (!inMemory) db.exec('PRAGMA journal_mode = WAL');
+  if (!inMemory) {
+    db.exec('PRAGMA journal_mode = WAL');
+    // Admin scripts write to the same file as a running server; wait for locks instead of failing.
+    db.exec('PRAGMA busy_timeout = 5000');
+  }
   db.exec(SCHEMA);
 
   db.prepare(
