@@ -38,7 +38,12 @@ npm run build                 # builds client/dist
 NODE_ENV=production npm start # serves API, websockets and the built app on PORT
 ```
 
-Put it behind HTTPS (e.g. Caddy or nginx) so the `Secure` cookie works. The SQLite file lives at `server/data/huddle.db` by default — back it up.
+Put it behind HTTPS (e.g. Caddy or nginx) so the `Secure` cookie works, and set:
+
+- `CLIENT_ORIGIN=https://chat.example.com` — the public URL (websocket connections from any other origin are refused)
+- `TRUST_PROXY=1` — one proxy in front, so login rate limiting sees real client IPs
+
+The SQLite file lives at `server/data/huddle.db` by default — back it up.
 
 ### Configuration
 
