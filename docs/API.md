@@ -65,7 +65,8 @@ This is the single source of truth shared by `server/` and `client/`. Both sides
   - `400` validation error, `409` username taken,
     `403 { error: "Invalid invite code" }` when env `INVITE_CODE` is set and doesn't match,
     `403 { error: "This server is full (max 10 members)" }` when the user cap is reached.
-  - Rate limited: max 5 registration attempts per IP per hour, successful or not → `429` with `Retry-After`
+  - When `INVITE_CODE` is **not** set (open registration): max 5 registration attempts per IP per hour,
+    successful or not → `429` with `Retry-After`
     (`{ error: "Too many registration attempts, try again later" }`).
   - When `INVITE_CODE` is set: max 10 wrong invite codes per IP per 15 minutes → `429` with `Retry-After`.
   - Broadcasts socket `user:joined { user }`.

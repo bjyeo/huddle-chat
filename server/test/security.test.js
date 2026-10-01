@@ -239,6 +239,21 @@ describe('registration rate limiting', () => {
       await server.stop();
     }
   });
+
+  it('lets a whole group with the invite code sign up from one IP', async () => {
+    const server = await startServer({ registerRateLimit: undefined, inviteCode: 'let-me-in' });
+    try {
+      for (let i = 1; i <= 10; i++) {
+        const res = await server
+          .request()
+          .post('/api/auth/register')
+          .send({ username: `member_${i}`, password: PASSWORD, inviteCode: 'let-me-in' });
+        assert.equal(res.status, 201, `member_${i}: ${res.text}`);
+      }
+    } finally {
+      await server.stop();
+    }
+  });
 });
 
 describe('sessions table migration', () => {

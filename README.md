@@ -56,8 +56,9 @@ In production the server refuses to start unless:
   purpose, set `ALLOW_OPEN_REGISTRATION=true` instead.
 
 Sessions are stored server-side: logging out revokes that session everywhere, including copies of the
-cookie. Registration is limited to 5 attempts per IP per hour (so a group behind one office IP may need to
-spread sign-ups out), and failed logins and wrong invite codes to 10 per IP per 15 minutes.
+cookie. With open registration (`ALLOW_OPEN_REGISTRATION=true`) sign-ups are limited to 5 attempts per
+IP per hour; with an invite code there is no such cap, so a whole group can join from one office IP.
+Failed logins and wrong invite codes are limited to 10 per IP per 15 minutes.
 Upgrading from a version without server-side sessions logs everyone out once.
 
 ### Administration

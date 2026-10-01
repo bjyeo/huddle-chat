@@ -24,12 +24,16 @@ export function authRouter(deps) {
   };
 
   router.post('/register', async (req, res) => {
-    // Every attempt counts (valid or not), so one IP can't script through the member slots.
-    const registerRetryAfter = registerLimiter.retryAfter(req.ip);
-    if (registerRetryAfter > 0) {
-      return tooMany(res, registerRetryAfter, 'Too many registration attempts, try again later');
+    // With open registration, every attempt counts so one IP can't script through the member
+    // slots. With an invite code the code is the gate (wrong guesses are limited below), so a
+    // group signing up from one office or dorm IP isn't blocked halfway through.
+    if (!config.inviteCode) {
+      const registerRetryAfter = registerLimiter.retryAfter(req.ip);
+      if (registerRetryAfter > 0) {
+        return tooMany(res, registerRetryAfter, 'Too many registration attempts, try again later');
+      }
+      registerLimiter.record(req.ip);
     }
-    registerLimiter.record(req.ip);
 
     // Invite codes are the only gate on joining, so guessing them is rate limited like logins.
     const inviteRetryAfter = config.inviteCode ? inviteLimiter.retryAfter(req.ip) : 0;
